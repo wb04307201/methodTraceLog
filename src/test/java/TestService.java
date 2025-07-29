@@ -10,8 +10,4 @@ public class TestService {
     public String hello(String name) {
         return testComponent.hello(name);
     }
-
-    public String error() {
-        throw new RuntimeException("error");
-    }
 }
