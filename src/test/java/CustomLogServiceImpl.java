@@ -1,5 +1,5 @@
-package cn.wubo.log.core;
-
+import cn.wubo.log.core.ILogService;
+import cn.wubo.log.core.LogActionEnum;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -14,7 +14,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class SimpleeLogServiceImpl implements ILogService {
+public class CustomLogServiceImpl implements ILogService {
 
     @Override
     public void log(String traceid, String pspanid, String spanid, String classname, String methodSignature, Object context, LogActionEnum logActionEnum) {

@@ -1,8 +1,14 @@
+import cn.wubo.log.core.ILogService;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
 @TestConfiguration
 public class TestConfig {
+
+    @Bean
+    public ILogService logService() {
+        return new CustomLogServiceImpl();
+    }
 
     @Bean
     public TestComponent testComponent() {

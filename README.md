@@ -25,7 +25,7 @@
 <dependency>
     <groupId>com.gitee.wb04307201</groupId>
     <artifactId>log-spring-boot-starter</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 </dependency>
 ```
 
@@ -44,12 +44,12 @@ public class LogDemoApplication {
 
 启动服务访问接口可看到如下输出：
 ```
-2025-07-28T17:17:00.926+08:00  INFO 56168 --- [           main] cn.wubo.log.core.SimpleeLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: null, spanid: be4616ce-4186-4960-8e9c-cd6179923faf, classname: TestController, methodSignature: public java.lang.String TestController.get(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1753694220926
-2025-07-28T17:17:00.931+08:00  INFO 56168 --- [           main] cn.wubo.log.core.SimpleeLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: be4616ce-4186-4960-8e9c-cd6179923faf, spanid: ac4c50d2-0c57-47a5-b44c-08cf721fa0bf, classname: TestService, methodSignature: public java.lang.String TestService.hello(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1753694220931
-2025-07-28T17:17:00.934+08:00  INFO 56168 --- [           main] cn.wubo.log.core.SimpleeLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: ac4c50d2-0c57-47a5-b44c-08cf721fa0bf, spanid: c5e96410-864c-413b-b818-fcb731bbd357, classname: TestComponent, methodSignature: public java.lang.String TestComponent.hello(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1753694220934
-2025-07-28T17:17:00.935+08:00  INFO 56168 --- [           main] cn.wubo.log.core.SimpleeLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: ac4c50d2-0c57-47a5-b44c-08cf721fa0bf, spanid: c5e96410-864c-413b-b818-fcb731bbd357, classname: TestComponent, methodSignature: public java.lang.String TestComponent.hello(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1753694220935
-2025-07-28T17:17:00.935+08:00  INFO 56168 --- [           main] cn.wubo.log.core.SimpleeLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: be4616ce-4186-4960-8e9c-cd6179923faf, spanid: ac4c50d2-0c57-47a5-b44c-08cf721fa0bf, classname: TestService, methodSignature: public java.lang.String TestService.hello(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1753694220935
-2025-07-28T17:17:00.935+08:00  INFO 56168 --- [           main] cn.wubo.log.core.SimpleeLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: null, spanid: be4616ce-4186-4960-8e9c-cd6179923faf, classname: TestController, methodSignature: public java.lang.String TestController.get(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1753694220935
+2025-07-28T17:17:00.926+08:00  INFO 56168 --- [           main] cn.wubo.log.core.DefaultLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: null, spanid: be4616ce-4186-4960-8e9c-cd6179923faf, classname: TestController, methodSignature: public java.lang.String TestController.get(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1753694220926
+2025-07-28T17:17:00.931+08:00  INFO 56168 --- [           main] cn.wubo.log.core.DefaultLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: be4616ce-4186-4960-8e9c-cd6179923faf, spanid: ac4c50d2-0c57-47a5-b44c-08cf721fa0bf, classname: TestService, methodSignature: public java.lang.String TestService.hello(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1753694220931
+2025-07-28T17:17:00.934+08:00  INFO 56168 --- [           main] cn.wubo.log.core.DefaultLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: ac4c50d2-0c57-47a5-b44c-08cf721fa0bf, spanid: c5e96410-864c-413b-b818-fcb731bbd357, classname: TestComponent, methodSignature: public java.lang.String TestComponent.hello(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1753694220934
+2025-07-28T17:17:00.935+08:00  INFO 56168 --- [           main] cn.wubo.log.core.DefaultLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: ac4c50d2-0c57-47a5-b44c-08cf721fa0bf, spanid: c5e96410-864c-413b-b818-fcb731bbd357, classname: TestComponent, methodSignature: public java.lang.String TestComponent.hello(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1753694220935
+2025-07-28T17:17:00.935+08:00  INFO 56168 --- [           main] cn.wubo.log.core.DefaultLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: be4616ce-4186-4960-8e9c-cd6179923faf, spanid: ac4c50d2-0c57-47a5-b44c-08cf721fa0bf, classname: TestService, methodSignature: public java.lang.String TestService.hello(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1753694220935
+2025-07-28T17:17:00.935+08:00  INFO 56168 --- [           main] cn.wubo.log.core.DefaultLogServiceImpl   : traceid: e3264e8a-8cc2-4905-a5eb-5cbabb66d143, pspanid: null, spanid: be4616ce-4186-4960-8e9c-cd6179923faf, classname: TestController, methodSignature: public java.lang.String TestController.get(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1753694220935
 ```
 
 traceid为一次调用链id
@@ -57,11 +57,18 @@ pspanid为父级方法id
 spanid为当前方法id
 
 
-## 可以继承接口[ILogService.java](src/main/java/cn/wubo/log/core/ILogService.java)并实现log自定义切面数据据处理，修改配置对应到自定义实现类
+## 可以继承接口[ILogService.java](src/main/java/cn/wubo/log/core/ILogService.java)并实现log自定义切面数据据处理
 
-```yml
-log:
-  logService: cn.wubo.log.core.SimpleeLogServiceImpl //修改成自定义实现类
+```java
+@Component
+@Slf4j
+public class CustomLogServiceImpl implements ILogService {
+
+    @Override
+    public void log(String traceid, String pspanid, String spanid, String classname, String methodSignature, Object context, LogActionEnum logActionEnum) {
+        // 自定义实现
+    }
+}
 ```
 
 

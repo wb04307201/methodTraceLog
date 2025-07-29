@@ -17,8 +17,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(classes = {
-        LogConfig.class, // 你的主配置
-        TestConfig.class     // 测试专用配置
+        TestConfig.class,
+        LogConfig.class
 })
 public class AopTest {
 
