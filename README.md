@@ -2,7 +2,7 @@
 
 > 方法链路日志，引入依赖，零代码便可拥有针对服务内方法维度的全链路追踪日志
 
-[![](https://jitpack.io/v/com.gitee.wb04307201/log-spring-boot-starter.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
+[![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
 [![fork](https://gitee.com/wb04307201/methodTraceLog/badge/fork.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
 [![star](https://img.shields.io/github/stars/wb04307201/methodTraceLog)](https://github.com/wb04307201/methodTraceLog)
