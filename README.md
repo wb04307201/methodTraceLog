@@ -1,6 +1,6 @@
 # methodTraceLog
 
-> 方法链路日志，引入依赖，零代码便可拥有针对服务内方法维度的全链路追踪日志
+> 方法链路日志，引入依赖，用于记录服务内方法维度的执行调用链路日志
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
@@ -8,6 +8,14 @@
 [![star](https://img.shields.io/github/stars/wb04307201/methodTraceLog)](https://github.com/wb04307201/methodTraceLog)
 [![fork](https://img.shields.io/github/forks/wb04307201/methodTraceLog)](https://github.com/wb04307201/methodTraceLog)  
 ![MIT](https://img.shields.io/badge/License-Apache2.0-blue.svg) ![JDK](https://img.shields.io/badge/JDK-17+-green.svg) ![SpringBoot](https://img.shields.io/badge/Srping%20Boot-3+-green.svg)
+
+## 功能特性
+
+- **全链路追踪**: 通过MDC（Mapped Diagnostic Context）实现调用链追踪
+- **自动日志记录**: 自动记录方法执行前、执行后和异常情况
+- **唯一标识**: 为每次请求生成唯一的traceId和spanId
+- **灵活配置**: 支持自定义日志服务实现
+- **类型安全**: 使用枚举定义日志动作类型
 
 ## 第一步 增加 JitPack 仓库
 ```xml
