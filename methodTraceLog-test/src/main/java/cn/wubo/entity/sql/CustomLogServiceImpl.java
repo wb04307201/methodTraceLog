@@ -1,5 +1,6 @@
-package cn.wubo.method.trace.log;
+package cn.wubo.entity.sql;
 
+import cn.wubo.method.trace.log.LogActionEnum;
 import cn.wubo.method.trace.log.service.ILogService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

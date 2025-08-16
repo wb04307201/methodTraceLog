@@ -1,5 +1,9 @@
 package cn.wubo.method.trace.log;
 
+import cn.wubo.entity.sql.CustomLogServiceImpl;
+import cn.wubo.entity.sql.TestComponent;
+import cn.wubo.entity.sql.TestController;
+import cn.wubo.entity.sql.TestService;
 import cn.wubo.method.trace.log.service.ILogService;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;

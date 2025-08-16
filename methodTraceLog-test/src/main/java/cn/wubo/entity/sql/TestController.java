@@ -1,4 +1,4 @@
-package cn.wubo.method.trace.log;
+package cn.wubo.entity.sql;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;

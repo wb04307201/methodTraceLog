@@ -1,4 +1,4 @@
-package cn.wubo.method.trace.log;
+package cn.wubo.entity.sql;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
