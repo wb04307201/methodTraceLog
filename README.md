@@ -1,6 +1,6 @@
 # methodTraceLog
 
-> 方法链路日志，引入依赖，用于记录服务内方法维度的执行调用链路日志
+> 方法链路日志，引入依赖，记录服务内方法维度的执行调用链路日志
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
