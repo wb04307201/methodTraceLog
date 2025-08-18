@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.lang.reflect.Array;
@@ -16,6 +17,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
+@Service
 public class CustomLogServiceImpl implements ILogService {
 
     @Override

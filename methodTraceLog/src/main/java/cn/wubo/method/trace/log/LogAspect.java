@@ -39,7 +39,10 @@ public class LogAspect {
      * @return 目标方法执行后的返回结果
      * @throws Throwable 目标方法可能抛出的异常
      */
-    @Around("@within(org.springframework.stereotype.Component) || @within(org.springframework.stereotype.Service) || @within(org.springframework.web.bind.annotation.RestController)")
+    @Around("(@within(org.springframework.stereotype.Component) || " +
+            "@within(org.springframework.stereotype.Service) || " +
+            "@within(org.springframework.web.bind.annotation.RestController)) && " +
+            "!within(cn.wubo.method.trace.log.service.ILogService+)")
     public Object around(ProceedingJoinPoint jp) throws Throwable {
         Object returnValue;
         // 获取当前线程中已存在的跟踪ID
