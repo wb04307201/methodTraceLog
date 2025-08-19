@@ -1,6 +1,6 @@
-# methodTraceLog
+# methodTraceLog 方法调用追踪和监控
 
-> 方法链路日志，引入依赖，记录服务内方法维度的执行调用链路日志和监控
+> 一个基于Spring AOP和Micrometer的Java方法调用追踪和监控工具
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
@@ -36,7 +36,7 @@
     <version>1.0.5</version>
 </dependency>
 ```
-
+默认使用使用DefaultLogServiceImpl进行基础日志记录
 启动服务,当访问接口可看到如下输出：
 ```
 2025-08-18T10:59:45.638+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: null, spanid: a52a7934-88d3-44e9-bcf5-1469a0364493, classname: cn.wubo.entity.sql.TestController, methodSignature: public java.lang.String cn.wubo.entity.sql.TestController.get(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1755485985638
@@ -53,6 +53,7 @@ spanid为当前方法id
 
 
 ## 可通过配置开启监控指标
+使用MonitorLogServiceImpl进行日志记录和性能监控
 ```yaml
 method-trace-log:
   monitor: true
@@ -90,7 +91,8 @@ GET http://localhost:8080/actuator/metrics/method.calls.total?tag=className:cn.w
 ```
 更多请查看Spring Boot Actuator中端点的访问规则以及相关配置
 
-## 可以继承[ILogService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/service/ILogService.java)接口并实现log自定义切面数据据处理
+## 可以继承[ILogService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/service/ILogService.java)接口并实现自定义日志数据据的处理
+
 ```java
 @Component
 @Slf4j
@@ -102,6 +104,7 @@ public class CustomLogServiceImpl implements ILogService {
     }
 }
 ```
+**注意**：自定义会使默认的日志和监控功能失效
 
 ## 生产环境可通过配置关闭日志功能
 ```yaml
