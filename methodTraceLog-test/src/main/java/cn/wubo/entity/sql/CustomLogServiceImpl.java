@@ -17,7 +17,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
-@Service
+//@Service
 public class CustomLogServiceImpl implements ILogService {
 
     @Override

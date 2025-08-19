@@ -1,7 +1,9 @@
-package cn.wubo.method.trace.log.service.impl;
+package cn.wubo.method.trace.log.monitor;
 
 import cn.wubo.method.trace.log.LogActionEnum;
 import cn.wubo.method.trace.log.service.ILogService;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -9,23 +11,41 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.lang.reflect.Array;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static cn.wubo.method.trace.log.Constants.LOG_TEMPLATE;
+import static cn.wubo.method.trace.log.monitor.Constants.*;
 
 @Slf4j
-public class DefaultLogServiceImpl implements ILogService {
+public class MonitorLogServiceImpl implements ILogService {
+
+    private final MeterRegistry meterRegistry;
+
+    public MonitorLogServiceImpl(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+    }
+
+    Map<String, Timer.Sample> timerSamples = new ConcurrentHashMap<>();
+
 
     @Override
     public void log(String traceid, String pspanid, String spanid, String classname, String methodSignature, Object context, LogActionEnum logActionEnum) {
-        if (logActionEnum == LogActionEnum.AFTER_THROW)
-            log.error(LOG_TEMPLATE, traceid, pspanid, spanid, classname, methodSignature, transContext(context), logActionEnum, System.currentTimeMillis());
-        else
+        if (logActionEnum == LogActionEnum.BEFORE) {
+            meterRegistry.counter(METHOD_CALLS_TOTAL, CLASS_NAME, classname, METHOD_SIGNATURE, methodSignature).increment();
+            Timer.Sample sample = Timer.start(meterRegistry);
+            timerSamples.put(spanid, sample);
             log.info(LOG_TEMPLATE, traceid, pspanid, spanid, classname, methodSignature, transContext(context), logActionEnum, System.currentTimeMillis());
+        } else if (logActionEnum == LogActionEnum.AFTER_RETURN) {
+            meterRegistry.counter(METHOD_CALLS_SUCCESS, CLASS_NAME, classname, METHOD_SIGNATURE, methodSignature).increment();
+            timerSamples.get(spanid).stop(Timer.builder(METHOD_EXECUTION_TIME).tags(CLASS_NAME, classname, METHOD_SIGNATURE, methodSignature,STATUS,"success").register(meterRegistry));
+            log.info(LOG_TEMPLATE, traceid, pspanid, spanid, classname, methodSignature, transContext(context), logActionEnum, System.currentTimeMillis());
+        } else if (logActionEnum == LogActionEnum.AFTER_THROW) {
+            meterRegistry.counter(METHOD_CALLS_FAILURE, CLASS_NAME, classname, METHOD_SIGNATURE, methodSignature).increment();
+            timerSamples.get(spanid).stop(Timer.builder(METHOD_EXECUTION_TIME).tags(CLASS_NAME, classname,METHOD_SIGNATURE, methodSignature,STATUS,"exception").register(meterRegistry));
+            log.error(LOG_TEMPLATE, traceid, pspanid, spanid, classname, methodSignature, transContext(context), logActionEnum, System.currentTimeMillis());
+        }
     }
 
     /**

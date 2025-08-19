@@ -3,21 +3,43 @@ package cn.wubo.method.trace.log.autoconfigure;
 import cn.wubo.method.trace.log.LogAspect;
 import cn.wubo.method.trace.log.service.ILogService;
 import cn.wubo.method.trace.log.service.impl.DefaultLogServiceImpl;
+import cn.wubo.method.trace.log.monitor.MonitorLogServiceImpl;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 
+import static cn.wubo.method.trace.log.monitor.Constants.*;
+
 @AutoConfiguration
 @EnableAspectJAutoProxy
-@EnableConfigurationProperties({LogProperties.class})
+@ConditionalOnExpression("${method-trace-log.enable:true}")
 public class LogConfig {
 
     @Bean
+    @ConditionalOnExpression("${method-trace-log.monitor:false}")
+    public MeterRegistryCustomizer<MeterRegistry> metricsCommonTags() {
+        return registry -> {
+            registry.counter(METHOD_CALLS_TOTAL);
+            registry.counter(METHOD_CALLS_SUCCESS);
+            registry.counter(METHOD_CALLS_FAILURE);
+            registry.timer(METHOD_EXECUTION_TIME);
+        };
+    }
+
+    @Bean
     @ConditionalOnMissingBean
-    public ILogService logService() {
+    @ConditionalOnExpression("${method-trace-log.monitor:false}")
+    public ILogService monitorLogService(MeterRegistry meterRegistry) {
+        return new MonitorLogServiceImpl(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public ILogService defaultLogService() {
         return new DefaultLogServiceImpl();
     }
 
@@ -30,7 +52,6 @@ public class LogConfig {
      * @throws IllegalArgumentException 当logService参数为null时抛出
      */
     @Bean
-    @ConditionalOnExpression("${log.enable:true}")
     public LogAspect logAspect(ILogService logService) {
         // 参数校验，防止 logService 为 null
         if (logService == null) {

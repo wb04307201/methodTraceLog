@@ -1,6 +1,6 @@
 # methodTraceLog
 
-> 方法链路日志，引入依赖，记录服务内方法维度的执行调用链路日志
+> 方法链路日志，引入依赖，记录服务内方法维度的执行调用链路日志和监控
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
@@ -16,6 +16,7 @@
 - **唯一标识**: 为每次请求生成唯一的traceId和spanId
 - **灵活配置**: 支持自定义日志服务实现
 - **类型安全**: 使用枚举定义日志动作类型
+- **监控**: 可选Micrometer收集方法调用的监控指标
 
 ## 第一步 增加 JitPack 仓库
 ```xml
@@ -32,7 +33,7 @@
 <dependency>
     <groupId>com.gitee.wb04307201</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.4</version>
+    <version>1.0.5</version>
 </dependency>
 ```
 
@@ -51,8 +52,45 @@ pspanid为父级方法id
 spanid为当前方法id
 
 
-## 可以继承[ILogService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/service/ILogService.java)接口并实现log自定义切面数据据处理
+## 可通过配置开启监控指标
+```yaml
+method-trace-log:
+  monitor: true
+```
+访问`/actuator/metrics`，返回类似以下JSON，列出所有可用的指标名称：
+访问`/actuator/metrics/<指标名>`获取具体指标数据：
+**指标名**；
+- method.calls.total: 方法调用总数 
+- method.success.total: 方法成功执行次数 
+- method.exceptions.total: 方法异常次数 
+- method.execution.time: 方法执行时间分布
 
+**例如**：
+```bash
+GET http://localhost:8080/actuator/metrics/method.calls.total?tag=className:cn.wubo.entity.sql.TestController
+```
+```json
+{
+  "name": "method.calls.total",
+  "measurements": [
+    {
+      "statistic": "COUNT",
+      "value": 2.0
+    }
+  ],
+  "availableTags": [
+    {
+      "tag": "methodSignature",
+      "values": [
+        "public java.lang.String cn.wubo.entity.sql.TestController.get(java.lang.String)"
+      ]
+    }
+  ]
+}
+```
+更多请查看Spring Boot Actuator中端点的访问规则以及相关配置
+
+## 可以继承[ILogService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/service/ILogService.java)接口并实现log自定义切面数据据处理
 ```java
 @Component
 @Slf4j
@@ -65,10 +103,10 @@ public class CustomLogServiceImpl implements ILogService {
 }
 ```
 
-## 可通过配置关闭日志
+## 生产环境可通过配置关闭日志功能
 ```yaml
 method-trace-log:
-    enable: true
+    enable: false
 ```
 
 
