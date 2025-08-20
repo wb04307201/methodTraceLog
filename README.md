@@ -31,7 +31,7 @@
 ## 第二步 引入jar
 ```xml
 <dependency>
-    <groupId>com.gitee.wb04307201</groupId>
+    <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
     <version>1.0.5</version>
 </dependency>
