@@ -1,4 +1,4 @@
-# methodTraceLog 方法调用追踪和监控
+# Method Trace Log - 方法调用追踪和监控
 
 > 一个基于Spring AOP和Micrometer的Java方法调用追踪和监控工具
 
