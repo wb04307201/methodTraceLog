@@ -1,6 +1,7 @@
-# methodTraceLog 方法调用追踪和监控
+# Method Trace Log - 方法调用追踪和监控
 
-> 一个基于Spring AOP和Micrometer的Java方法调用追踪和监控工具
+> 一个基于Spring AOP和Micrometer的Java方法调用追踪和监控工具，用于记录方法执行的全链路日志和性能指标。
+
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
