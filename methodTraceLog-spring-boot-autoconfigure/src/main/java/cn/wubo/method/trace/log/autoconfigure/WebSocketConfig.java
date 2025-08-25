@@ -79,8 +79,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         return new FileMonitorService(properties, messagingTemplate);
     }
 
-    @Bean
-    public RouterFunction<ServerResponse> logFileViewer(FileService fileService, Validator validator) {
+    @Bean("wb04307201MethodTraceLogRouter")
+    public RouterFunction<ServerResponse> methodTraceLogRouter(FileService fileService, Validator validator) {
         RouterFunctions.Builder builder = RouterFunctions.route();
         builder.GET("/log/file/view", request -> ServerResponse.ok().contentType(MediaType.TEXT_HTML).body(new ClassPathResource(("/view.html"))));
         builder.GET("/log/file/files", accept(MediaType.APPLICATION_JSON), request -> ServerResponse.ok().body(fileService.getLogFiles()));
