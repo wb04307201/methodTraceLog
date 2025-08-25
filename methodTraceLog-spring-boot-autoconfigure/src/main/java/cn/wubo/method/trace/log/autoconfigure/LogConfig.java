@@ -1,9 +1,10 @@
 package cn.wubo.method.trace.log.autoconfigure;
 
+import cn.wubo.method.trace.log.ICallService;
 import cn.wubo.method.trace.log.LogAspect;
-import cn.wubo.method.trace.log.service.ILogService;
-import cn.wubo.method.trace.log.service.impl.DefaultLogServiceImpl;
-import cn.wubo.method.trace.log.monitor.MonitorLogServiceImpl;
+import cn.wubo.method.trace.log.impl.invalid.InvalidServiceImpl;
+import cn.wubo.method.trace.log.impl.log.SimpleLogServiceImpl;
+import cn.wubo.method.trace.log.impl.monitor.SimpleMonitorServiceImpl;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -12,15 +13,17 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 
-import static cn.wubo.method.trace.log.monitor.Constants.*;
+import java.util.List;
+
+import static cn.wubo.method.trace.log.Constants.*;
 
 @AutoConfiguration
 @EnableAspectJAutoProxy
-@ConditionalOnExpression("${method-trace-log.enable:true}")
+@ConditionalOnExpression("${method-trace-log.log.enable:true}")
 public class LogConfig {
 
     @Bean
-    @ConditionalOnExpression("${method-trace-log.monitor:false}")
+    @ConditionalOnExpression("${method-trace-log.log.monitor:false}")
     public MeterRegistryCustomizer<MeterRegistry> metricsCommonTags() {
         return registry -> {
             registry.counter(METHOD_CALLS_TOTAL);
@@ -32,34 +35,32 @@ public class LogConfig {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnExpression("${method-trace-log.monitor:false}")
-    public ILogService monitorLogService(MeterRegistry meterRegistry) {
-        return new MonitorLogServiceImpl(meterRegistry);
+    @ConditionalOnExpression("${method-trace-log.log.monitor:false}")
+    public ICallService simpleMonitorService(MeterRegistry meterRegistry) {
+        return new SimpleMonitorServiceImpl(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnExpression("${method-trace-log.log.log:true}")
+    public ICallService simpleLogService() {
+        return new SimpleLogServiceImpl();
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public ILogService defaultLogService() {
-        return new DefaultLogServiceImpl();
+    public ICallService invalidService() {
+        return new InvalidServiceImpl();
     }
 
-
     /**
-     * 创建日志切面 Bean，用于处理日志记录逻辑
+     * 创建日志切面Bean
      *
-     * @param logService 日志服务接口实现，用于执行具体的日志记录操作
-     * @return LogAspect 日志切面实例，用于拦截方法执行并记录日志
-     * @throws IllegalArgumentException 当logService参数为null时抛出
+     * @param callServices 调用服务列表，用于日志切面处理
+     * @return LogAspect 日志切面实例
      */
     @Bean
-    public LogAspect logAspect(ILogService logService) {
-        // 参数校验，防止 logService 为 null
-        if (logService == null) {
-            throw new IllegalArgumentException("ILogService 不能为 null");
-        }
-
-        // 创建并返回 LogAspect 实例
-        return new LogAspect(logService);
+    public LogAspect logAspect(List<ICallService> callServices) {
+        return new LogAspect(callServices);
     }
 
 }

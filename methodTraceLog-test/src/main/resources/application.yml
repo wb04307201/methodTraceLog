@@ -1,6 +1,17 @@
 method-trace-log:
-  enable: true
-  monitor: true
+  log:
+    enable: true          # 是否启用方法追踪，默认true
+    log: true             # 是否启用简单日志记录，默认true
+    monitor: false        # 是否启用监控指标记录，默认false
+  file:
+    enable: true        # 是否启用文件相关功能，默认true
+    path: ./logs        # 日志文件路径，默认为项目根目录下的logs文件夹
+    allowed-extensions:    # 允许访问的文件扩展名
+      - .log
+      - .txt
+      - .out
+    max-lines: 1000    # 单次查询最大行数
+    max-file-size: 100    # 文件最大大小（MB）
 management:
   endpoints:
     web:

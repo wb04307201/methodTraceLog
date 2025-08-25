@@ -1,10 +1,8 @@
 package cn.wubo.method.trace.log;
 
-import cn.wubo.entity.sql.CustomLogServiceImpl;
 import cn.wubo.entity.sql.TestComponent;
 import cn.wubo.entity.sql.TestController;
 import cn.wubo.entity.sql.TestService;
-import cn.wubo.method.trace.log.service.ILogService;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 
@@ -12,7 +10,7 @@ import org.springframework.context.annotation.Bean;
 public class TestConfig {
 
     @Bean
-    public ILogService logService() {
+    public ICallService customLogService() {
         return new CustomLogServiceImpl();
     }
 
@@ -22,13 +20,13 @@ public class TestConfig {
     }
 
     @Bean
-    public TestService testService() {
-        return new TestService();
+    public TestService testService(TestComponent testComponent) {
+        return new TestService(testComponent);
     }
 
     @Bean
-    public TestController testController() {
-        return new TestController();
+    public TestController testController(TestService testService) {
+        return new TestController(testService);
     }
 
 }

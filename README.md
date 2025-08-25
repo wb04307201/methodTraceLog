@@ -1,6 +1,6 @@
-# Method Trace Log - 方法调用追踪和监控
+# Method Trace Log - 方法执行监控和日志
 
-> 一个基于Spring AOP和Micrometer的Java方法调用追踪和监控工具，用于记录方法执行的全链路日志和性能指标。
+> 该组件可以自动记录方法的执行信息，包括执行时间、参数、返回值等，并提供日志文件监控和可视化功能。
 
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
@@ -12,12 +12,13 @@
 
 ## 功能特性
 
-- **全链路追踪**: 通过MDC（Mapped Diagnostic Context）实现调用链追踪
-- **自动日志记录**: 自动记录方法执行前、执行后和异常情况
-- **唯一标识**: 为每次请求生成唯一的traceId和spanId
-- **灵活配置**: 支持自定义日志服务实现
-- **类型安全**: 使用枚举定义日志动作类型
-- **监控**: 可选Micrometer收集方法调用的监控指标
+- **方法调用追踪**：通过AOP切面自动记录方法的调用信息
+- **多种记录方式**：
+    - 简单日志记录（默认启用，动记录方法执行前、执行后和异常情况，以及调用链追踪）
+    - 监控指标记录（基于Micrometer，可选）
+- **日志文件管理**：支持日志文件查询和下载
+- **实时日志查看**：通过WebSocket提供实时日志监控功能
+- **Web界面**：提供简单的Web界面查看日志文件
 
 ## 第一步 增加 JitPack 仓库
 ```xml
@@ -34,10 +35,29 @@
 <dependency>
     <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.5</version>
+    <version>1.0.6</version>
 </dependency>
 ```
-默认使用使用DefaultLogServiceImpl进行基础日志记录
+
+## 配置文件
+添加配置:
+```yaml
+method-trace-log:
+  enable: true          # 是否启用方法追踪，默认true
+  log: true             # 是否启用简单日志记录，默认true
+  monitor: false        # 是否启用监控指标记录，默认false
+  file:
+    enable: true        # 是否启用文件相关功能，默认true
+    path: ./logs        # 日志文件路径，默认为项目根目录下的logs文件夹
+    allowed-extensions: # 允许访问的文件扩展名
+      - .log
+      - .txt
+      - .out
+    max-lines: 1000     # 单次查询最大行数
+    max-file-size: 100  # 文件最大大小（MB）
+```
+
+## 简单日志记录
 启动服务,当访问接口可看到如下输出：
 ```
 2025-08-18T10:59:45.638+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: null, spanid: a52a7934-88d3-44e9-bcf5-1469a0364493, classname: cn.wubo.entity.sql.TestController, methodSignature: public java.lang.String cn.wubo.entity.sql.TestController.get(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1755485985638
@@ -53,11 +73,11 @@ pspanid为父级方法id
 spanid为当前方法id
 
 
-## 可通过配置开启监控指标
-使用MonitorLogServiceImpl进行日志记录和性能监控
+## 监控指标记录功能
+修改配置文件，启用监控指标记录功能，通过Micrometer收集监控指标
 ```yaml
 method-trace-log:
-  monitor: true
+  monitor: true        # 是否启用监控指标记录，默认false
 ```
 访问`/actuator/metrics`，返回类似以下JSON，列出所有可用的指标名称：
 访问`/actuator/metrics/<指标名>`获取具体指标数据：
@@ -92,7 +112,14 @@ GET http://localhost:8080/actuator/metrics/method.calls.total?tag=className:cn.w
 ```
 更多请查看Spring Boot Actuator中端点的访问规则以及相关配置
 
-## 可以继承[ILogService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/service/ILogService.java)接口并实现自定义日志数据据的处理
+## 日志文件管理
+
+访问地址[http://localhost:8080/log/file/view](http://localhost:8080/log/file/view)打开日志文件管理界面
+
+![img.png](img.png)
+
+
+## 可以继承[ICallService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/ICallService.java)接口并实现自定义日志数据据的处理
 
 ```java
 @Component
@@ -104,13 +131,6 @@ public class CustomLogServiceImpl implements ILogService {
         // 自定义实现
     }
 }
-```
-**注意**：自定义会使默认的日志和监控功能失效
-
-## 生产环境可通过配置关闭日志功能
-```yaml
-method-trace-log:
-    enable: false
 ```
 
 

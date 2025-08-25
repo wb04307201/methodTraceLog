@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日志查询系统</title>
+    <!-- SockJS 和 STOMP 客户端库 -->
+    <script src="/static/sockjs-client/1.6.1/sockjs.min.js"></script>
+    <script src="/static/stompjs/7.1.1/stomp.umd.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="/static/view.css"/>
+    <script src="/static/view.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- 文件选择区域 -->
+        <div class="area-panel fade-in">
+            <h3>📁 选择日志文件</h3>
+            <div id="fileList" class="file-list">
+                <div class="loading">正在加载文件列表...</div>
+            </div>
+        </div>
+
+        <!-- 搜索条件区域 -->
+        <div class="area-panel hidden fade-in" id="searchPanel">
+            <h3>🔍 搜索条件</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="keyword">关键字</label>
+                    <input type="text" id="keyword" placeholder="输入搜索关键字">
+                </div>
+                <div class="form-group">
+                    <label for="level">日志级别</label>
+                    <select id="level">
+                        <option value="">全部</option>
+                        <option value="ERROR">ERROR</option>
+                        <option value="WARN">WARN</option>
+                        <option value="INFO">INFO</option>
+                        <option value="DEBUG">DEBUG</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="pageSize">每页行数</label>
+                    <select id="pageSize">
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                        <option value="200">200</option>
+                        <option value="500">500</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="startTime">开始时间</label>
+                    <input type="datetime-local" id="startTime">
+                </div>
+                <div class="form-group">
+                    <label for="endTime">结束时间</label>
+                    <input type="datetime-local" id="endTime">
+                </div>
+                <div class="form-group">
+                    <label for="reverse">排序方式</label>
+                    <select id="reverse">
+                        <option value="true">最新在前</option>
+                        <option value="false">最旧在前</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <button class="btn btn-primary" onclick="searchLogs()">🔍 搜索日志</button>
+                <button class="btn btn-primary" onclick="resetLogs()">🔄 重置搜索</button>
+                <button class="btn btn-success" onclick="downloadLog()">📥 下载日志</button>
+                <div class="realtime-controls">
+                    <div class="connection-status">
+                        <span class="status-indicator disconnected" id="connectionStatus"></span>
+                        <span id="connectionText">未连接</span>
+                    </div>
+                    <button class="btn btn-toggle" onclick="toggleRealtimeMonitor()" id="realtimeToggleBtn">
+                        📡 实时监控
+                    </button>
+                    <button class="btn" disabled id="clearRealtimeBtn" onclick="clearRealtimeLogs()">🔍 清空日志</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 结果显示区域 -->
+        <div class="area-panel hidden fade-in" id="resultPanel">
+            <div class="result-header">
+                <div>
+                    <strong id="fileName"></strong>
+                    <span id="fileInfo"></span>
+                </div>
+                <div id="resultStats"></div>
+            </div>
+            
+            <div class="log-content" id="logContent">
+                <div class="loading">正在搜索日志...</div>
+            </div>
+            
+            <div class="pagination">
+                <div class="pagination-info" id="paginationInfo"></div>
+                <div class="pagination-controls">
+                    <button class="btn btn-primary" onclick="previousPage()" id="prevBtn">上一页</button>
+                    <input type="number" id="currentPage" value="1" min="1" onchange="goToPage()">
+                    <span>/ <span id="totalPages">1</span></span>
+                    <button class="btn btn-primary" onclick="nextPage()" id="nextBtn">下一页</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

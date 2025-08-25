@@ -1,10 +1,7 @@
-package cn.wubo.method.trace.log.service.impl;
+package cn.wubo.method.trace.log;
 
-import cn.wubo.method.trace.log.LogActionEnum;
-import cn.wubo.method.trace.log.service.ILogService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -15,18 +12,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import static cn.wubo.method.trace.log.Constants.LOG_TEMPLATE;
+public interface ICallService {
 
-@Slf4j
-public class DefaultLogServiceImpl implements ILogService {
-
-    @Override
-    public void log(String traceid, String pspanid, String spanid, String classname, String methodSignature, Object context, LogActionEnum logActionEnum) {
-        if (logActionEnum == LogActionEnum.AFTER_THROW)
-            log.error(LOG_TEMPLATE, traceid, pspanid, spanid, classname, methodSignature, transContext(context), logActionEnum, System.currentTimeMillis());
-        else
-            log.info(LOG_TEMPLATE, traceid, pspanid, spanid, classname, methodSignature, transContext(context), logActionEnum, System.currentTimeMillis());
-    }
+    void consumer(ServiceCallInfo serviceCallInfo);
 
     /**
      * 默认方法，用于根据上下文对象的类型转换上下文
@@ -36,7 +24,7 @@ public class DefaultLogServiceImpl implements ILogService {
      * @param context 待转换的上下文对象，可以是任意类型
      * @return 转换后的对象，具体类型取决于输入对象的类型
      */
-    private Object transContext(Object context) {
+    default Object transContext(Object context) {
         if (context == null) {
             return null; // 明确处理 null 输入
         }
@@ -81,4 +69,5 @@ public class DefaultLogServiceImpl implements ILogService {
         // 兜底返回原始对象
         return context;
     }
+
 }
