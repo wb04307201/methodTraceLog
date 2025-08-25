@@ -1,1 +1,2 @@
 cn.wubo.method.trace.log.autoconfigure.LogConfig
+cn.wubo.method.trace.log.autoconfigure.WebSocketConfig

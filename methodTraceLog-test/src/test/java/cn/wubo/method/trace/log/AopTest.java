@@ -8,6 +8,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.containsString;
@@ -17,13 +18,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(classes = {TestConfig.class, WebMvcAutoConfiguration.class, LogConfig.class})
 @AutoConfigureMockMvc
-public class AopTest {
+@TestPropertySource(locations = "classpath:application.yml")
+class AopTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @Test
-    public void testGet() throws Exception {
+    void testGet() throws Exception {
         // 调用控制器触发整个调用链
         mockMvc.perform(get("/test/get")
                         .queryParam("name", "java")
@@ -35,7 +37,7 @@ public class AopTest {
     }
 
     @Test
-    public void testPost() throws Exception {
+    void testPost() throws Exception {
         // 调用控制器触发整个调用链
         mockMvc.perform(post("/test/post")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -49,7 +51,7 @@ public class AopTest {
     }
 
     @Test
-    public void upload() throws Exception {
+    void upload() throws Exception {
         // 1. 创建模拟文件（文件名、原始文件名、内容类型、文件内容）
         MockMultipartFile file = new MockMultipartFile("file",                     // 参数名（与控制器@RequestParam一致）
                 "test.txt",                 // 原始文件名

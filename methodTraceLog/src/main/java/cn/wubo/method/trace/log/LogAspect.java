@@ -1,6 +1,5 @@
 package cn.wubo.method.trace.log;
 
-import cn.wubo.method.trace.log.service.ILogService;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -8,16 +7,17 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.MDC;
 
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
 @Aspect
 public class LogAspect {
 
-    private ILogService logService;
+    private List<ICallService> callServices;
 
-    public LogAspect(ILogService logService) {
-        this.logService = logService;
+    public LogAspect(List<ICallService> callServices) {
+        this.callServices = callServices;
     }
 
     /**
@@ -30,7 +30,7 @@ public class LogAspect {
      */
     public static final String LOG_SPAN_ID = "spanid";
 
-        /**
+            /**
      * 环绕通知，应用于带有@Component、@Service或@RestController注解的类中的方法
      * 该方法主要用于追踪和日志记录，通过MDC（Mapped Diagnostic Context）传递跟踪ID和跨度ID，
      * 实现全链路调用日志追踪功能。
@@ -42,7 +42,7 @@ public class LogAspect {
     @Around("(@within(org.springframework.stereotype.Component) || " +
             "@within(org.springframework.stereotype.Service) || " +
             "@within(org.springframework.web.bind.annotation.RestController)) && " +
-            "!within(cn.wubo.method.trace.log.service.ILogService+)")
+            "!within(cn.wubo.method.trace.log.ICallService+)")
     public Object around(ProceedingJoinPoint jp) throws Throwable {
         Object returnValue;
         // 获取当前线程中已存在的跟踪ID
@@ -68,16 +68,25 @@ public class LogAspect {
         // 获取方法完整签名字符串
         String methodSignatureString = methodSignature.toLongString();
 
+        // 构建方法调用前的服务调用信息
+        ServiceCallInfo serviceCallInfo = new ServiceCallInfo(traceid, pspanid, spanid, className, methodSignatureString, jp.getArgs(), LogActionEnum.BEFORE,System.currentTimeMillis());
+
         try {
-            // 记录方法执行前的操作日志
-            logService.log(traceid, pspanid, spanid, className, methodSignatureString, jp.getArgs(), LogActionEnum.BEFORE);
+            // 执行前置处理逻辑
+            callServices.forEach(callService -> callService.consumer(serviceCallInfo));
             // 执行目标方法
             returnValue = jp.proceed();
-            // 记录方法正常返回后的操作日志
-            logService.log(traceid, pspanid, spanid, className, methodSignatureString, returnValue, LogActionEnum.AFTER_RETURN);
+            // 设置返回值并执行后置正常返回处理逻辑
+            serviceCallInfo.setContext(returnValue);
+            serviceCallInfo.setLogActionEnum(LogActionEnum.AFTER_RETURN);
+            serviceCallInfo.setTimeMillis(System.currentTimeMillis());
+            callServices.forEach(callService -> callService.consumer(serviceCallInfo));
         } catch (Exception e) {
-            // 记录方法抛出异常时的操作日志
-            logService.log(traceid, pspanid, spanid, className, methodSignatureString, e, LogActionEnum.AFTER_THROW);
+            // 设置异常信息并执行后置异常处理逻辑
+            serviceCallInfo.setContext(e);
+            serviceCallInfo.setLogActionEnum(LogActionEnum.AFTER_THROW);
+            serviceCallInfo.setTimeMillis(System.currentTimeMillis());
+            callServices.forEach(callService -> callService.consumer(serviceCallInfo));
             throw e;
         } finally {
             // 清理MDC上下文，防止线程复用造成数据污染
@@ -87,5 +96,6 @@ public class LogAspect {
 
         return returnValue;
     }
+
 
 }
