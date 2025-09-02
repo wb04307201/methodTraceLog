@@ -35,7 +35,7 @@
 <dependency>
     <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.7</version>
+    <version>1.0.8</version>
 </dependency>
 ```
 
@@ -93,7 +93,7 @@ management:
 
 通过URL访问内置方法调用监控面板: `http://localhost:8080/log/monitor/view`
 ![img_1.png](img_1.png)
-
+![img_2.png](img_2.png)
 
 也可以通过Spring Actuator访问指标数据
 访问`/actuator/metrics`，返回类似以下JSON，列出所有可用的指标名称：
