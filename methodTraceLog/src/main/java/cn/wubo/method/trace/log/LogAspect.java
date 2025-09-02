@@ -30,7 +30,7 @@ public class LogAspect {
      */
     public static final String LOG_SPAN_ID = "spanid";
 
-            /**
+    /**
      * 环绕通知，应用于带有@Component、@Service或@RestController注解的类中的方法
      * 该方法主要用于追踪和日志记录，通过MDC（Mapped Diagnostic Context）传递跟踪ID和跨度ID，
      * 实现全链路调用日志追踪功能。
@@ -42,7 +42,10 @@ public class LogAspect {
     @Around("(@within(org.springframework.stereotype.Component) || " +
             "@within(org.springframework.stereotype.Service) || " +
             "@within(org.springframework.web.bind.annotation.RestController)) && " +
-            "!within(cn.wubo.method.trace.log.ICallService+)")
+            "!within(cn.wubo.method.trace.log.ICallService+) &&" +
+            "!within(cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint) &&" +
+            "!within(cn.wubo.method.trace.log.file.FileService) &&" +
+            "!within(cn.wubo.method.trace.log.file.FileMonitorService)")
     public Object around(ProceedingJoinPoint jp) throws Throwable {
         Object returnValue;
         // 获取当前线程中已存在的跟踪ID
@@ -69,24 +72,26 @@ public class LogAspect {
         String methodSignatureString = methodSignature.toLongString();
 
         // 构建方法调用前的服务调用信息
-        ServiceCallInfo serviceCallInfo = new ServiceCallInfo(traceid, pspanid, spanid, className, methodSignatureString, jp.getArgs(), LogActionEnum.BEFORE,System.currentTimeMillis());
+        ServiceCallInfo before = new ServiceCallInfo(traceid, pspanid, spanid, className, methodSignatureString, jp.getArgs(), LogActionEnum.BEFORE, System.currentTimeMillis());
+        ServiceCallInfo after = before.clone();
 
         try {
             // 执行前置处理逻辑
-            callServices.forEach(callService -> callService.consumer(serviceCallInfo));
+            callServices.forEach(callService -> callService.consumer(before));
             // 执行目标方法
             returnValue = jp.proceed();
+
             // 设置返回值并执行后置正常返回处理逻辑
-            serviceCallInfo.setContext(returnValue);
-            serviceCallInfo.setLogActionEnum(LogActionEnum.AFTER_RETURN);
-            serviceCallInfo.setTimeMillis(System.currentTimeMillis());
-            callServices.forEach(callService -> callService.consumer(serviceCallInfo));
+            after.setContext(returnValue);
+            after.setLogActionEnum(LogActionEnum.AFTER_RETURN);
+            after.setTimeMillis(System.currentTimeMillis());
+            callServices.forEach(callService -> callService.consumer(after));
         } catch (Exception e) {
             // 设置异常信息并执行后置异常处理逻辑
-            serviceCallInfo.setContext(e);
-            serviceCallInfo.setLogActionEnum(LogActionEnum.AFTER_THROW);
-            serviceCallInfo.setTimeMillis(System.currentTimeMillis());
-            callServices.forEach(callService -> callService.consumer(serviceCallInfo));
+            after.setContext(e);
+            after.setLogActionEnum(LogActionEnum.AFTER_THROW);
+            after.setTimeMillis(System.currentTimeMillis());
+            callServices.forEach(callService -> callService.consumer(after));
             throw e;
         } finally {
             // 清理MDC上下文，防止线程复用造成数据污染

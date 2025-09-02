@@ -66,11 +66,7 @@ public class FileMonitorService implements InitializingBean, DisposableBean {
                 throw new IllegalStateException("Log directory does not exist: " + properties.getLogPath());
             }
 
-            // @formatter:off
-            logPath.register(this.watchService,
-                    StandardWatchEventKinds.ENTRY_MODIFY,
-                    StandardWatchEventKinds.ENTRY_CREATE);
-            // @formatter:on
+            logPath.register(this.watchService, StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_CREATE);
 
             // 启动文件监控线程
             this.executorService.submit(this::watchFiles);

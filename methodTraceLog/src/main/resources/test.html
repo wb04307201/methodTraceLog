@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>树形结构展示</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .tree-container {
+            margin-top: 20px;
+        }
+        .tree-node {
+            margin-left: 20px;
+            padding: 5px;
+            position: relative;
+        }
+        .node-content {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            background-color: #f0f0f0;
+            cursor: pointer;
+        }
+        .node-content:hover {
+            background-color: #e0e0e0;
+        }
+        .node-info {
+            display: none;
+            position: fixed;
+            /*left: 50%;*/
+            /*top: 0;*/
+            left: 400px;
+            margin-left: 10px;
+            padding: 10px;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 100;
+            min-width: 200px;
+            white-space: nowrap;
+        }
+        .node-content:hover + .node-info, .node-info:hover {
+            display: block;
+        }
+        .node-info-item {
+            margin: 5px 0;
+        }
+        .node-info-label {
+            font-weight: bold;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+<h1>调用链追踪</h1>
+<div id="tree-container" class="tree-container"></div>
+
+<script>
+    // 示例数据
+    const treeData = {
+        "before": {
+            "traceid": "ca8aa2bf-ba2c-4dbd-967f-180076c79568",
+            "pspanid": null,
+            "spanid": "8df4cf6a-79b0-4d1e-be58-dd3e75c17f77",
+            "className": "cn.wubo.entity.sql.TestController",
+            "methodSignature": "public java.lang.String cn.wubo.entity.sql.TestController.get(java.lang.String)",
+            "context": ["999"],
+            "logActionEnum": "BEFORE",
+            "timeMillis": 1756792181798
+        },
+        "after": {
+            "traceid": "ca8aa2bf-ba2c-4dbd-967f-180076c79568",
+            "pspanid": null,
+            "spanid": "8df4cf6a-79b0-4d1e-be58-dd3e75c17f77",
+            "className": "cn.wubo.entity.sql.TestController",
+            "methodSignature": "public java.lang.String cn.wubo.entity.sql.TestController.get(java.lang.String)",
+            "context": "999 say:'hello world!'",
+            "logActionEnum": "AFTER_RETURN",
+            "timeMillis": 1756792188821
+        },
+        "children": [
+            {
+                "before": {
+                    "traceid": "ca8aa2bf-ba2c-4dbd-967f-180076c79568",
+                    "pspanid": "8df4cf6a-79b0-4d1e-be58-dd3e75c17f77",
+                    "spanid": "d2d6f138-7a24-458d-bb00-d160675b1bf3",
+                    "className": "cn.wubo.entity.sql.TestService",
+                    "methodSignature": "public java.lang.String cn.wubo.entity.sql.TestService.hello(java.lang.String)",
+                    "context": ["999"],
+                    "logActionEnum": "BEFORE",
+                    "timeMillis": 1756792182806
+                },
+                "after": {
+                    "traceid": "ca8aa2bf-ba2c-4dbd-967f-180076c79568",
+                    "pspanid": "8df4cf6a-79b0-4d1e-be58-dd3e75c17f77",
+                    "spanid": "d2d6f138-7a24-458d-bb00-d160675b1bf3",
+                    "className": "cn.wubo.entity.sql.TestService",
+                    "methodSignature": "public java.lang.String cn.wubo.entity.sql.TestService.hello(java.lang.String)",
+                    "context": "999 say:'hello world!'",
+                    "logActionEnum": "AFTER_RETURN",
+                    "timeMillis": 1756792188821
+                },
+                "children": [
+                    {
+                        "before": {
+                            "traceid": "ca8aa2bf-ba2c-4dbd-967f-180076c79568",
+                            "pspanid": "d2d6f138-7a24-458d-bb00-d160675b1bf3",
+                            "spanid": "5aa7299c-be8a-420f-a206-cd54a9c18016",
+                            "className": "cn.wubo.entity.sql.TestComponent",
+                            "methodSignature": "public java.lang.String cn.wubo.entity.sql.TestComponent.hello(java.lang.String)",
+                            "context": ["999"],
+                            "logActionEnum": "BEFORE",
+                            "timeMillis": 1756792185811
+                        },
+                        "after": {
+                            "traceid": "ca8aa2bf-ba2c-4dbd-967f-180076c79568",
+                            "pspanid": "d2d6f138-7a24-458d-bb00-d160675b1bf3",
+                            "spanid": "5aa7299c-be8a-420f-a206-cd54a9c18016",
+                            "className": "cn.wubo.entity.sql.TestComponent",
+                            "methodSignature": "public java.lang.String cn.wubo.entity.sql.TestComponent.hello(java.lang.String)",
+                            "context": "999 say:'hello world!'",
+                            "logActionEnum": "AFTER_RETURN",
+                            "timeMillis": 1756792188820
+                        },
+                        "children": []
+                    }
+                ]
+            }
+        ]
+    };
+
+    // 创建树形结构
+    function createTree(data, container) {
+        // 创建节点容器
+        const nodeContainer = document.createElement('div');
+        nodeContainer.className = 'tree-node';
+
+        // 处理BEFORE节点
+        const beforeNode = createNodeElement(data);
+        nodeContainer.appendChild(beforeNode);
+
+        // 处理子节点
+        if (data.children && data.children.length > 0) {
+            data.children.forEach(child => {
+                createTree(child, nodeContainer);
+            });
+        }
+
+        container.appendChild(nodeContainer);
+    }
+
+    // 创建单个节点元素
+    function createNodeElement(nodeData) {
+        const nodeElement = document.createElement('div');
+
+        // 创建节点内容
+        const content = document.createElement('div');
+        content.className = 'node-content';
+
+        // 显示简化的节点信息
+        const className = nodeData.before.className.split('.').pop();
+        const methodName = nodeData.before.methodSignature.split(' ').pop().split('(')[0];
+        if(!nodeData.after){
+            content.textContent = `🟡`;
+        }else if(nodeData.after.logActionEnum === 'AFTER_RETURN'){
+            content.textContent = `🟢`;
+        }else if(nodeData.after.logActionEnum === 'AFTER_THROWING'){
+            content.textContent = `🔴`;
+        }
+        content.textContent += `${className}#${methodName}()`;
+
+        // 创建节点信息面板
+        const infoPanel = document.createElement('div');
+        infoPanel.className = 'node-info';
+
+        // 添加详细信息
+        const addInfoItem = (label, value) => {
+            const item = document.createElement('div');
+            item.className = 'node-info-item';
+
+            const labelElem = document.createElement('span');
+            labelElem.className = 'node-info-label';
+            labelElem.textContent = label + ':';
+
+            const valueElem = document.createElement('span');
+            valueElem.textContent = value;
+
+            item.appendChild(labelElem);
+            item.appendChild(valueElem);
+            infoPanel.appendChild(item);
+        };
+
+        addInfoItem('追踪ID', nodeData.before.traceid);
+        addInfoItem('跨度ID', nodeData.before.spanid);
+        addInfoItem('父跨度ID', nodeData.before.pspanid || '无');
+        addInfoItem('参数', JSON.stringify(nodeData.before.context));
+        addInfoItem('结果',  nodeData.after ? JSON.stringify(nodeData.after.context) : "");
+        addInfoItem('调用开始时间', new Date(nodeData.before.timeMillis).toLocaleString());
+        addInfoItem('调用结束时间', nodeData.after ? new Date(nodeData.after.timeMillis).toLocaleString() : "N/A");
+        addInfoItem('耗时(ms)', nodeData.after ? nodeData.after.timeMillis - nodeData.before.timeMillis : "N/A");
+
+        nodeElement.appendChild(content);
+        nodeElement.appendChild(infoPanel);
+
+        return nodeElement;
+    }
+
+    // 初始化树
+    document.addEventListener('DOMContentLoaded', () => {
+        const container = document.getElementById('tree-container');
+        createTree(treeData, container);
+    });
+</script>
+</body>
+</html>

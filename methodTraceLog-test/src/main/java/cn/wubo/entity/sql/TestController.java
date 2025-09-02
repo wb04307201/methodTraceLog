@@ -10,6 +10,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.HashMap;
 import java.util.Map;
 
+import static java.lang.Thread.sleep;
+
 @Slf4j
 @RequestMapping("test")
 @RestController
@@ -25,6 +27,11 @@ public class TestController {
 
     @GetMapping("/get")
     public String get(@RequestParam("name") String name) {
+        try {
+            sleep(1000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
         return testService.hello(name);
     }
 

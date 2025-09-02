@@ -43,18 +43,24 @@
 添加配置:
 ```yaml
 method-trace-log:
-  enable: true          # 是否启用方法追踪，默认true
-  log: true             # 是否启用简单日志记录，默认true
-  monitor: false        # 是否启用监控指标记录，默认false
+  log:
+    enable: true          # 是否启用方法追踪，默认true
+    log: true             # 是否启用简单日志记录，默认true
+    monitor: true         # 是否启用监控指标记录，默认false
   file:
-    enable: true        # 是否启用文件相关功能，默认true
-    path: ./logs        # 日志文件路径，默认为项目根目录下的logs文件夹
-    allowed-extensions: # 允许访问的文件扩展名
+    enable: true          # 是否启用文件相关功能，默认true
+    path: ./logs          # 日志文件路径，默认为项目根目录下的logs文件夹
+    allowed-extensions:   # 允许访问的文件扩展名
       - .log
       - .txt
       - .out
-    max-lines: 1000     # 单次查询最大行数
-    max-file-size: 100  # 文件最大大小（MB）
+    max-lines: 1000       # 单次查询最大行数
+    max-file-size: 100    # 文件最大大小（MB）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: methodtrace
 ```
 
 ## 简单日志记录
@@ -68,54 +74,132 @@ method-trace-log:
 2025-08-18T10:59:45.648+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: null, spanid: a52a7934-88d3-44e9-bcf5-1469a0364493, classname: cn.wubo.entity.sql.TestController, methodSignature: public java.lang.String cn.wubo.entity.sql.TestController.get(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1755485985648
 ```
 
-traceid为一次调用链id
-pspanid为父级方法id
-spanid为当前方法id
+traceid 追踪id
+pspanid跨度id
+spanid父跨度id
 
 
-## 监控指标记录功能
+## 开启监控指标记录功能和方法调用监控面板
 修改配置文件，启用监控指标记录功能，通过Micrometer收集监控指标
 ```yaml
 method-trace-log:
   monitor: true        # 是否启用监控指标记录，默认false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: methodtrace    # 启用监控的自定义端点
 ```
+
+通过URL访问内置方法调用监控面板: `http://localhost:8080/log/monitor/view`
+![img_1.png](img_1.png)
+
+
+也可以通过Spring Actuator访问指标数据
 访问`/actuator/metrics`，返回类似以下JSON，列出所有可用的指标名称：
 访问`/actuator/metrics/<指标名>`获取具体指标数据：
-**指标名**；
-- method.calls.total: 方法调用总数 
-- method.success.total: 方法成功执行次数 
-- method.exceptions.total: 方法异常次数 
-- method.execution.time: 方法执行时间分布
 
 **例如**：
 ```bash
-GET http://localhost:8080/actuator/metrics/method.calls.total?tag=className:cn.wubo.entity.sql.TestController
+GET http://localhost:8080/actuator/metrics/method.execution.time
 ```
 ```json
 {
-  "name": "method.calls.total",
+  "name": "method.execution.time",
+  "baseUnit": "seconds",
   "measurements": [
     {
       "statistic": "COUNT",
-      "value": 2.0
+      "value": 9.0
+    },
+    {
+      "statistic": "TOTAL_TIME",
+      "value": 48.1634356
+    },
+    {
+      "statistic": "MAX",
+      "value": 0.0
     }
   ],
   "availableTags": [
     {
       "tag": "methodSignature",
       "values": [
+        "public java.lang.String cn.wubo.entity.sql.TestService.hello(java.lang.String)",
+        "public java.lang.String cn.wubo.entity.sql.TestComponent.hello(java.lang.String)",
         "public java.lang.String cn.wubo.entity.sql.TestController.get(java.lang.String)"
+      ]
+    },
+    {
+      "tag": "action",
+      "values": [
+        "AFTER_RETURN"
+      ]
+    },
+    {
+      "tag": "className",
+      "values": [
+        "cn.wubo.entity.sql.TestService",
+        "cn.wubo.entity.sql.TestController",
+        "cn.wubo.entity.sql.TestComponent"
       ]
     }
   ]
 }
 ```
-更多请查看Spring Boot Actuator中端点的访问规则以及相关配置
+
+可以通过自定义端点来查看：
+```bash
+GET http://localhost:8080/actuator/methodtrace
+```
+```json
+{
+  "name": "method.execution.time",
+  "baseUnit": "seconds",
+  "measurements": [
+    {
+      "statistic": "COUNT",
+      "value": 9.0
+    },
+    {
+      "statistic": "TOTAL_TIME",
+      "value": 48.1634356
+    },
+    {
+      "statistic": "MAX",
+      "value": 0.0
+    }
+  ],
+  "availableTags": [
+    {
+      "tag": "methodSignature",
+      "values": [
+        "public java.lang.String cn.wubo.entity.sql.TestService.hello(java.lang.String)",
+        "public java.lang.String cn.wubo.entity.sql.TestComponent.hello(java.lang.String)",
+        "public java.lang.String cn.wubo.entity.sql.TestController.get(java.lang.String)"
+      ]
+    },
+    {
+      "tag": "action",
+      "values": [
+        "AFTER_RETURN"
+      ]
+    },
+    {
+      "tag": "className",
+      "values": [
+        "cn.wubo.entity.sql.TestService",
+        "cn.wubo.entity.sql.TestController",
+        "cn.wubo.entity.sql.TestComponent"
+      ]
+    }
+  ]
+}
+```
 
 ## 日志文件管理
 
-访问地址[http://localhost:8080/log/file/view](http://localhost:8080/log/file/view)打开日志文件管理界面
-
+通过URL访问日志文件查看器: `http://localhost:8080/log/file/view`
 ![img.png](img.png)
 
 

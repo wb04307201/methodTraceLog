@@ -2,7 +2,7 @@ method-trace-log:
   log:
     enable: true          # 是否启用方法追踪，默认true
     log: true             # 是否启用简单日志记录，默认true
-    monitor: false        # 是否启用监控指标记录，默认false
+    monitor: true        # 是否启用监控指标记录，默认false
   file:
     enable: true        # 是否启用文件相关功能，默认true
     path: ./logs        # 日志文件路径，默认为项目根目录下的logs文件夹
@@ -16,4 +16,4 @@ management:
   endpoints:
     web:
       exposure:
-        include: "*"
+        include: methodtrace

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>方法调用监控面板</title>
+    <link rel="stylesheet" type="text/css" href="/static/monitor.css"/>
+    <script src="/static/monitor.js"></script>
+</head>
+<body>
+<div class="container">
+    <!-- 摘要统计卡片 -->
+    <div class="summary-cards">
+        <div class="card card-primary">
+            <div class="card-title">总调用次数</div>
+            <div class="card-text" id="totalCount">0</div>
+        </div>
+        <div class="card card-success">
+            <div class="card-title">成功调用</div>
+            <div class="card-text" id="successCount">0</div>
+        </div>
+        <div class="card card-danger">
+            <div class="card-title">失败调用</div>
+            <div class="card-text" id="failureCount">0</div>
+        </div>
+        <div class="card card-info">
+            <div class="card-title">平均成功率</div>
+            <div class="card-text" id="avgSuccessRate">0%</div>
+        </div>
+    </div>
+
+    <!-- 刷新控制 -->
+    <div class="control-panel">
+        <button id="refreshBtn" class="btn btn-primary">刷新数据</button>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="autoRefresh">
+            <label class="form-check-label" for="autoRefresh">自动刷新</label>
+        </div>
+        <select id="refreshInterval" class="form-select">
+            <option value="5000">5秒</option>
+            <option value="10000" selected>10秒</option>
+            <option value="30000">30秒</option>
+            <option value="60000">1分钟</option>
+        </select>
+    </div>
+
+    <!-- 方法调用统计表 -->
+    <div class="table-container">
+        <div class="table-header">
+            <h4>方法调用详细统计</h4>
+        </div>
+        <div id="methodtrace">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>正在加载数据...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 方法调用表 -->
+    <div class="table-container">
+        <div class="table-header">
+            <h4>最近的方法调用</h4>
+        </div>
+        <div id="method">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>正在加载数据...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹出框结构 -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <div id="tree-container" class="tree-container"></div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

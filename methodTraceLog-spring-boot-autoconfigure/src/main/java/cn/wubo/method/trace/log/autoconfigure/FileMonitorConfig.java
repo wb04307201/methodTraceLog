@@ -4,7 +4,6 @@ import cn.wubo.method.trace.log.file.FileMonitorService;
 import cn.wubo.method.trace.log.file.FileProperties;
 import cn.wubo.method.trace.log.file.FileService;
 import cn.wubo.method.trace.log.file.dto.LogQueryRequest;
-import cn.wubo.method.trace.log.utils.FileUtils;
 import cn.wubo.method.trace.log.utils.ValidationUtils;
 import jakarta.validation.Validator;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,13 +25,10 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
-import java.io.IOException;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.Objects;
 
 import static cn.wubo.method.trace.log.file.Constants.ERROR;
 import static cn.wubo.method.trace.log.file.Constants.MESSAGE;
@@ -42,7 +38,7 @@ import static org.springframework.web.servlet.function.RequestPredicates.accept;
 @EnableWebSocketMessageBroker
 @ConditionalOnExpression("${method-trace-log.file.enable:true}")
 @EnableConfigurationProperties(FileProperties.class)
-public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+public class FileMonitorConfig implements WebSocketMessageBrokerConfigurer {
 
     /**
      * 配置消息代理注册表
@@ -79,7 +75,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         return new FileMonitorService(properties, messagingTemplate);
     }
 
-    @Bean("wb04307201MethodTraceLogRouter")
+    @Bean("wb04307201LogFileRouter")
     public RouterFunction<ServerResponse> methodTraceLogRouter(FileService fileService, Validator validator) {
         RouterFunctions.Builder builder = RouterFunctions.route();
         builder.GET("/log/file/view", request -> ServerResponse.ok().contentType(MediaType.TEXT_HTML).body(new ClassPathResource(("/view.html"))));
