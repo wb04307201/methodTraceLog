@@ -9,7 +9,6 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,7 +27,7 @@ public class SimpleMonitorServiceImpl implements ICallService {
     private Map<String, Timer.Sample> timerSamples = new ConcurrentHashMap<>();
 
     @Getter
-    private List<MethodTraceInfo> methodTraceInfos = new LinkedList<>();
+    private List<MethodTraceInfo> methodTraceInfos = new ArrayList<>();
 
     private Map<String, MethodTraceInfo> methodTraceInfoMap = new ConcurrentHashMap<>();
 
