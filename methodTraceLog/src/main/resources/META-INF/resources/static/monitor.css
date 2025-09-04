@@ -84,38 +84,6 @@ body {
     font-size: 1.4em;
 }
 
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 15px;
-}
-
-th, td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
-}
-
-th {
-    background-color: #f8f9fa;
-    font-weight: bold;
-    color: #555;
-}
-
-tr:hover {
-    background-color: #f5f5f5;
-}
-
-.success-rate {
-    color: #27ae60;
-    font-weight: bold;
-}
-
-.failure-rate {
-    color: #e74c3c;
-    font-weight: bold;
-}
-
 /* 控制面板 */
 .control-panel {
     background: white;
@@ -317,4 +285,94 @@ table {
 .node-info-label {
     font-weight: bold;
     margin-right: 5px;
+}
+
+/* 表格容器样式 - 控制滚动 */
+.table-wrapper {
+    width: 100%;
+    overflow-x: auto; /* 横向滚动 */
+    overflow-y: auto; /* 纵向滚动 */
+    max-height: 400px; /* 固定高度，根据需要调整 */
+    margin: 20px 0;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    background-color: #fff;
+}
+
+/* 表格基础样式 */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* 表头样式 */
+thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+thead th {
+    background: #667eea;
+    color: white;
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: 600;
+    position: relative;
+}
+
+/* 表格内容样式 */
+tbody tr {
+    border-bottom: 1px solid #e0e0e0;
+    transition: background-color 0.2s;
+}
+
+tbody tr:hover {
+    background-color: #f5f5f5;
+}
+
+tbody td {
+    padding: 12px 15px;
+    color: #333;
+}
+
+/* 斑马纹效果 */
+tbody tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+tbody tr:nth-child(even):hover {
+    background-color: #f0f0f0;
+}
+
+/* 滚动条美化 - Webkit浏览器 */
+.table-container::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* 响应式调整 - 在小屏幕上增加内边距 */
+@media (max-width: 768px) {
+    thead th,
+    tbody td {
+        padding: 8px 10px;
+        font-size: 14px;
+    }
 }
