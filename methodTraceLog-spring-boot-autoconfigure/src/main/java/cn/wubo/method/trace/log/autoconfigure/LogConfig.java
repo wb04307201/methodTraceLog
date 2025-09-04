@@ -71,7 +71,7 @@ public class LogConfig {
         builder.GET("/log/monitor/view", request -> ServerResponse.ok().contentType(MediaType.TEXT_HTML).body(new ClassPathResource(("/monitor.html"))));
         builder.GET("/log/monitor/view/list", request -> ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(simpleMonitorService.getMethodTraceInfos()));
         builder.GET("/log/monitor/view/traceid", request -> {
-                    String id = request.param("id").orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "id is required")).toString();
+                    String id = request.param("id").orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "id is required"));
                     return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(simpleMonitorService.getByTraceId(id));
                 }
         );
