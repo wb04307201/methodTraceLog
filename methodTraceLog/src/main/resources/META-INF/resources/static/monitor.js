@@ -70,7 +70,7 @@ function updateSummary(data) {
 
     document.getElementById('totalCount').textContent = totalCount.toLocaleString();
     document.getElementById('successCount').textContent = successCount.toLocaleString();
-    document.getElementById('failureCount').textContent = failureCount.toLocaleString();
+    // document.getElementById('failureCount').textContent = failureCount.toLocaleString();
     document.getElementById('avgSuccessRate').textContent = avgSuccessRate + '%';
 }
 
@@ -87,21 +87,19 @@ function updateTable(data) {
     }
 
     let tableHTML = `
+            <div class="table-wrapper">
                 <table>
                     <thead>
-                        <tr>
+                    <tr>
                             <th>类名</th>
-                            <th>方法签名</th>
-                            <th>总调用次数</th>
-                            <th>成功调用</th>
-                            <th>失败调用</th>
+                            <th>方法名</th>
+                            <th>调用</th>
+                            <th>成功</th>
                             <th>成功率</th>
-                            <th>失败率</th>
-                            <th>平均成功时间(ms)</th>
-                            <th>平均失败时间(ms)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                            <th>耗时(ms)</th>
+                    </tr>
+                </thead>
+            <tbody>
             `;
 
     data.forEach(item => {
@@ -110,19 +108,17 @@ function updateTable(data) {
                         <td>${item.className}</td>
                         <td>${item.methodSignature}</td>
                         <td>${item.totalCalls.toLocaleString()}</td>
-                        <td class="success-rate">${item.successCalls.toLocaleString()}</td>
-                        <td class="failure-rate">${item.failedCalls.toLocaleString()}</td>
-                        <td class="success-rate">${item.successRate.toFixed(2)}%</td>
-                        <td class="failure-rate">${item.failureRate.toFixed(2)}%</td>
+                        <td>${item.successCalls.toLocaleString()}</td>
+                        <td>${item.successRate.toFixed(2)}%</td>
                         <td>${item.averageSuccessTime ? item.averageSuccessTime.toFixed(2) : 'N/A'}</td>
-                        <td>${item.averageFailureTime ? item.averageFailureTime.toFixed(2) : 'N/A'}</td>
                     </tr>
                 `;
     });
 
     tableHTML += `
-                    </tbody>
-                </table>
+            </tbody>
+        </table>
+    </div>
             `;
 
     methodtrace.innerHTML = tableHTML;
@@ -141,19 +137,20 @@ function updateMethodTable(data) {
     }
 
     let tableHTML = `
+            <div class="table-wrapper">
                 <table>
                     <thead>
-                        <tr>
-                            <th>类名</th>
-                            <th>方法签名</th>
-                            <th>调用开始时间</th>
-                            <th>调用结束时间</th>
-                            <th>耗时(ms)</th>
-                            <th>调用状态</th>
-                            <th>调用链</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                    <tr>
+                        <th>类名</th>
+                        <th>方法名</th>
+                        <th>开始时间</th>
+                        <th>结束时间</th>
+                        <th>耗时(ms)</th>
+                        <th>状态</th>
+                        <th>链路</th>
+                    </tr>
+                </thead>
+            <tbody>
             `;
 
     data.forEach(item => {
@@ -166,22 +163,22 @@ function updateMethodTable(data) {
         let status = item.after != null ? (item.after.logActionEnum == "AFTER_RETURN" ? "🟢成功" : "🔴失败") : "🟡调用中";
 
         tableHTML += `
-                    <tr>
-                        <td>${className}</td>
-                        <td>${methodSignature}</td>
-                        <td>${start}</td>
-                        <td>${end}</td>
-                        <td>${period}</td>
-                        <td>${status}</td>
-                        <td><a href="javascript:void(0);" onclick="openModal('${traceid}')">查看</a>
-</td>
-                    </tr>
+                 <tr>
+                    <td>${className}</td>
+                    <td>${methodSignature}</td>
+                    <td>${start}</td>
+                    <td>${end}</td>
+                    <td>${period}</td>
+                    <td>${status}</td>
+                    <td><a href="javascript:void(0);" onclick="openModal('${traceid}')">查看</a></td>
+                </tr>
                 `;
     });
 
     tableHTML += `
-                    </tbody>
-                </table>
+            </tbody>
+        </table>
+    </div>
             `;
 
     method.innerHTML = tableHTML;
