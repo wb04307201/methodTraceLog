@@ -35,7 +35,7 @@
 <dependency>
     <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.10</version>
+    <version>1.0.11</version>
 </dependency>
 ```
 
@@ -49,18 +49,20 @@ method-trace-log:
     monitor: true         # 是否启用监控指标记录，默认false
   file:
     enable: true          # 是否启用文件相关功能，默认true
-    path: ./logs          # 日志文件路径，默认为项目根目录下的logs文件夹
-    allowed-extensions:   # 允许访问的文件扩展名
+    path: ./logs          # 日志文件路径，默认为项目根目录下的logs文件夹，默认./logs
+    allowed-extensions:   # 允许访问的文件扩展名，默认.log .txt .out
       - .log
       - .txt
       - .out
-    max-lines: 1000       # 单次查询最大行数
-    max-file-size: 100    # 文件最大大小（MB）
+    max-lines: 1000       # 单次查询最大行数，默认1000
+    max-file-size: 100    # 文件最大大小（MB)，默认100
+    # 日志文件匹配模式，默认(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
+    log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
 management:
   endpoints:
     web:
       exposure:
-        include: methodtrace
+        include: methodtrace # 开启自定义端点
 ```
 
 ## 简单日志记录
@@ -74,9 +76,9 @@ management:
 2025-08-18T10:59:45.648+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: null, spanid: a52a7934-88d3-44e9-bcf5-1469a0364493, classname: cn.wubo.entity.sql.TestController, methodSignature: public java.lang.String cn.wubo.entity.sql.TestController.get(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1755485985648
 ```
 
-traceid 追踪id
-pspanid跨度id
-spanid父跨度id
+追踪id - traceid
+跨度id - spanid
+父跨度id - pspanid 
 
 
 ## 开启监控指标记录功能和方法调用监控面板

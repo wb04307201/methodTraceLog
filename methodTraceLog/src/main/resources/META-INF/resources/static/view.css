@@ -163,6 +163,7 @@ body {
 .log-content {
     max-height: 700px;
     overflow-y: auto;
+    overflow-x: hidden;
     font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
     font-size: 13px;
     line-height: 1.5;
