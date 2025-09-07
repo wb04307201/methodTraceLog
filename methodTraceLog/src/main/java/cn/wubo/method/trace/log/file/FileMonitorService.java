@@ -1,7 +1,7 @@
 package cn.wubo.method.trace.log.file;
 
+import cn.wubo.method.trace.log.LogLineInfo;
 import cn.wubo.method.trace.log.utils.FileUtils;
-import cn.wubo.method.trace.log.utils.LogParserUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import static cn.wubo.method.trace.log.file.Constants.MESSAGE;
 
@@ -24,6 +25,7 @@ import static cn.wubo.method.trace.log.file.Constants.MESSAGE;
 public class FileMonitorService implements InitializingBean, DisposableBean {
 
     private final FileProperties properties;
+    private final Pattern logPattern;
 
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -44,6 +46,7 @@ public class FileMonitorService implements InitializingBean, DisposableBean {
 
     public FileMonitorService(FileProperties properties, SimpMessagingTemplate messagingTemplate) {
         this.properties = properties;
+        this.logPattern = Pattern.compile(properties.getLogPattern());
         this.messagingTemplate = messagingTemplate;
     }
 
@@ -214,10 +217,10 @@ public class FileMonitorService implements InitializingBean, DisposableBean {
     private void sendLogLine(String fileName, String logLine) {
         try {
             // 解析日志行
-            LogParserUtils.LogLineInfo lineInfo = LogParserUtils.parseLine(logLine);
+            LogLineInfo lineInfo = LogLineInfo.parse(logLine,logPattern);
 
             // 构建消息
-            Map<String, Object> message = Map.of("type", "new_log_line", "fileName", fileName, "content", logLine, "timestamp", lineInfo.getTimestamp() != null ? lineInfo.getTimestamp().toString() : "", "level", lineInfo.getLevel() != null ? lineInfo.getLevel() : "", "rawContent", lineInfo.getContent() != null ? lineInfo.getContent() : logLine);
+            Map<String, Object> message = Map.of("type", "new_log_line", "fileName", fileName, "content", logLine);
 
             // 发送到WebSocket客户端
             messagingTemplate.convertAndSend("/topic/log-monitor", message);

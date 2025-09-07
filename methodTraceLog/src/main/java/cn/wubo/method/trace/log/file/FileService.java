@@ -1,9 +1,9 @@
 package cn.wubo.method.trace.log.file;
 
+import cn.wubo.method.trace.log.LogLineInfo;
 import cn.wubo.method.trace.log.file.dto.LogQueryRequest;
 import cn.wubo.method.trace.log.file.dto.LogQueryResponse;
 import cn.wubo.method.trace.log.utils.FileUtils;
-import cn.wubo.method.trace.log.utils.LogParserUtils;
 import org.springframework.util.StringUtils;
 
 import java.io.File;
@@ -16,14 +16,17 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class FileService {
 
     private final FileProperties properties;
+    private final Pattern logPattern;
 
     public FileService(FileProperties properties) {
         this.properties = properties;
+        this.logPattern = Pattern.compile(properties.getLogPattern());
     }
 
     /**
@@ -103,7 +106,11 @@ public class FileService {
             return lines;
         }
 
-        return lines.stream().map(LogParserUtils::parseLine).filter(lineInfo -> lineInfo.matchesFilter(request)).map(LogParserUtils.LogLineInfo::getOriginalLine).collect(Collectors.toList());
+        return lines.stream()
+                .map(line -> LogLineInfo.parse(line, logPattern))
+                .filter(lineInfo -> lineInfo.matchesFilter(request))
+                .map(LogLineInfo::getOriginalLine)
+                .collect(Collectors.toList());
     }
 
     /**

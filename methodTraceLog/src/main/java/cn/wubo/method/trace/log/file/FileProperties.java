@@ -31,4 +31,9 @@ public class FileProperties {
      * 文件最大大小（MB）
      */
     private long maxFileSize = 100;
+
+    /**
+     * 日志文件匹配模式
+     */
+    private String logPattern = "(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+\\[([^\\]]+)\\]\\s+(\\w+)\\s+([^\\s]+)\\s*-\\s*(.*)";
 }
