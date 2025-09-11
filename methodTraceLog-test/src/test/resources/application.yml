@@ -1,3 +1,0 @@
-method-trace-log:
-  log:
-    log: false             # 是否启用简单日志记录，默认true

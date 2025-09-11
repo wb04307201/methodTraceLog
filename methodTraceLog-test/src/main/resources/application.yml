@@ -1,8 +1,9 @@
 method-trace-log:
   log:
     enable: true          # 是否启用方法追踪，默认true
-    log: true             # 是否启用简单日志记录，默认true
-    monitor: true        # 是否启用监控指标记录，默认false
+    serviceCalls: # 启动时便开启的日志服务，默认无需配置全部开启，生产环境可以配置全部关闭，在需要时可通过web界面开启
+      - name: CustomLog  # 日志输出服务
+        enable: false
   file:
     enable: true        # 是否启用文件相关功能，默认true
     path: ./logs        # 日志文件路径，默认为项目根目录下的logs文件夹

@@ -1,6 +1,6 @@
 package cn.wubo.method.trace.log.impl.monitor;
 
-import cn.wubo.method.trace.log.ICallService;
+import cn.wubo.method.trace.log.AbstractCallService;
 import cn.wubo.method.trace.log.LogActionEnum;
 import cn.wubo.method.trace.log.ServiceCallInfo;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static cn.wubo.method.trace.log.Constants.*;
 
 @Slf4j
-public class SimpleMonitorServiceImpl implements ICallService {
+public class SimpleMonitorServiceImpl extends AbstractCallService {
 
     private final MeterRegistry meterRegistry;
 
@@ -54,6 +54,16 @@ public class SimpleMonitorServiceImpl implements ICallService {
             }
 
         }
+    }
+
+    @Override
+    public String getCallServiceName() {
+        return "SimpleMonitorService";
+    }
+
+    @Override
+    public String getCallServiceDesc() {
+        return "监控指标";
     }
 
     public MethodTraceInfo getByTraceId(String id) {

@@ -1,6 +1,7 @@
 package cn.wubo.method.trace.log.file;
 
-import cn.wubo.method.trace.log.LogLineInfo;
+import cn.wubo.method.trace.log.MethodTraceLogProperties;
+import cn.wubo.method.trace.log.file.dto.LogLineInfo;
 import cn.wubo.method.trace.log.file.dto.LogQueryRequest;
 import cn.wubo.method.trace.log.file.dto.LogQueryResponse;
 import cn.wubo.method.trace.log.utils.FileUtils;
@@ -19,12 +20,12 @@ import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-public class FileService {
+public class LogFileService {
 
-    private final FileProperties properties;
+    private final MethodTraceLogProperties.FileProperties properties;
     private final Pattern logPattern;
 
-    public FileService(FileProperties properties) {
+    public LogFileService(MethodTraceLogProperties.FileProperties properties) {
         this.properties = properties;
         this.logPattern = Pattern.compile(properties.getLogPattern());
     }

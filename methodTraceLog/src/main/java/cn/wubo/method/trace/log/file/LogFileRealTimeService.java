@@ -1,6 +1,7 @@
 package cn.wubo.method.trace.log.file;
 
-import cn.wubo.method.trace.log.LogLineInfo;
+import cn.wubo.method.trace.log.MethodTraceLogProperties;
+import cn.wubo.method.trace.log.file.dto.LogLineInfo;
 import cn.wubo.method.trace.log.utils.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.DisposableBean;
@@ -22,9 +23,9 @@ import java.util.regex.Pattern;
 import static cn.wubo.method.trace.log.file.Constants.MESSAGE;
 
 @Slf4j
-public class FileMonitorService implements InitializingBean, DisposableBean {
+public class LogFileRealTimeService implements InitializingBean, DisposableBean {
 
-    private final FileProperties properties;
+    private final MethodTraceLogProperties.FileProperties properties;
     private final Pattern logPattern;
 
     private final SimpMessagingTemplate messagingTemplate;
@@ -44,7 +45,7 @@ public class FileMonitorService implements InitializingBean, DisposableBean {
     // 监控状态
     private volatile boolean monitoring = false;
 
-    public FileMonitorService(FileProperties properties, SimpMessagingTemplate messagingTemplate) {
+    public LogFileRealTimeService(MethodTraceLogProperties.FileProperties properties, SimpMessagingTemplate messagingTemplate) {
         this.properties = properties;
         this.logPattern = Pattern.compile(properties.getLogPattern());
         this.messagingTemplate = messagingTemplate;
