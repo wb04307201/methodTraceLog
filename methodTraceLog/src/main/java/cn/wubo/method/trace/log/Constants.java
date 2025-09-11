@@ -9,6 +9,5 @@ public class Constants {
     public static final String METHOD_SIGNATURE = "methodSignature";
     public static final String METHOD_EXECUTION_TIME = "method.execution.time";
     public static final String ACTION = "action";
-    public static final String LOG_TEMPLATE = "traceid: {}, pspanid: {}, spanid: {}, classname: {}, methodSignature: {}, context: {}, logActionEnum: {}, time: {}";
 
 }

@@ -1,8 +1,8 @@
 package cn.wubo.method.trace.log.autoconfigure;
 
-import cn.wubo.method.trace.log.file.FileMonitorService;
-import cn.wubo.method.trace.log.file.FileProperties;
-import cn.wubo.method.trace.log.file.FileService;
+import cn.wubo.method.trace.log.MethodTraceLogProperties;
+import cn.wubo.method.trace.log.file.LogFileRealTimeService;
+import cn.wubo.method.trace.log.file.LogFileService;
 import cn.wubo.method.trace.log.file.dto.LogQueryRequest;
 import cn.wubo.method.trace.log.utils.ValidationUtils;
 import jakarta.validation.Validator;
@@ -37,8 +37,8 @@ import static org.springframework.web.servlet.function.RequestPredicates.accept;
 @AutoConfiguration
 @EnableWebSocketMessageBroker
 @ConditionalOnExpression("${method-trace-log.file.enable:true}")
-@EnableConfigurationProperties(FileProperties.class)
-public class FileMonitorConfig implements WebSocketMessageBrokerConfigurer {
+@EnableConfigurationProperties(MethodTraceLogProperties.class)
+public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
 
     /**
      * 配置消息代理注册表
@@ -66,26 +66,26 @@ public class FileMonitorConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     @Bean
-    public FileService fileService(FileProperties properties) {
-        return new FileService(properties);
+    public LogFileService logFileService(MethodTraceLogProperties properties) {
+        return new LogFileService(properties.getFile());
     }
 
     @Bean
-    public FileMonitorService fileMonitorService(FileProperties properties, SimpMessagingTemplate messagingTemplate) {
-        return new FileMonitorService(properties, messagingTemplate);
+    public LogFileRealTimeService logFileRealTimeService(MethodTraceLogProperties properties, SimpMessagingTemplate messagingTemplate) {
+        return new LogFileRealTimeService(properties.getFile(), messagingTemplate);
     }
 
-    @Bean("wb04307201LogFileRouter")
-    public RouterFunction<ServerResponse> methodTraceLogRouter(FileService fileService, Validator validator) {
+    @Bean("wb04307201MethodTraceLogFileRouter")
+    public RouterFunction<ServerResponse> methodTraceLogFileRouter(LogFileService fileService, Validator validator) {
         RouterFunctions.Builder builder = RouterFunctions.route();
-        builder.GET("/log/file/view", request -> ServerResponse.ok().contentType(MediaType.TEXT_HTML).body(new ClassPathResource(("/view.html"))));
-        builder.GET("/log/file/files", accept(MediaType.APPLICATION_JSON), request -> ServerResponse.ok().body(fileService.getLogFiles()));
-        builder.POST("/log/file/query", accept(MediaType.APPLICATION_JSON), request -> {
+        builder.GET("/methodTraceLog/logFile", request -> ServerResponse.ok().contentType(MediaType.TEXT_HTML).body(new ClassPathResource(("/logFile.html"))));
+        builder.GET("/methodTraceLog/logFile/files", accept(MediaType.APPLICATION_JSON), request -> ServerResponse.ok().body(fileService.getLogFiles()));
+        builder.POST("/methodTraceLog/logFile/query", accept(MediaType.APPLICATION_JSON), request -> {
             LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
             ValidationUtils.validate(validator, logQueryRequest);
             return ServerResponse.ok().body(fileService.queryLogs(logQueryRequest));
         });
-        builder.POST("/log/file/download", request -> {
+        builder.POST("/methodTraceLog/logFile/download", request -> {
             LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
             ValidationUtils.validate(validator, logQueryRequest);
             return ServerResponse.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header("Content-Disposition", "attachment;filename=" +  URLEncoder.encode(logQueryRequest.getFileName(), StandardCharsets.UTF_8)).build((req, res) -> {
@@ -103,11 +103,11 @@ public class FileMonitorConfig implements WebSocketMessageBrokerConfigurer {
     @Controller
     public class LogWebSocketController {
 
-        private final FileMonitorService fileMonitorService;
+        private final LogFileRealTimeService logFileRealTimeService;
 
         @Autowired
-        public LogWebSocketController(FileMonitorService fileMonitorService) {
-            this.fileMonitorService = fileMonitorService;
+        public LogWebSocketController(LogFileRealTimeService logFileRealTimeService) {
+            this.logFileRealTimeService = logFileRealTimeService;
         }
 
         /**
@@ -125,7 +125,7 @@ public class FileMonitorConfig implements WebSocketMessageBrokerConfigurer {
                     return Map.of("type", ERROR, MESSAGE, "文件名不能为空");
                 }
 
-                return fileMonitorService.startMonitoring(fileName);
+                return logFileRealTimeService.startMonitoring(fileName);
             } catch (Exception e) {
                 return Map.of("type", ERROR, MESSAGE, "开始监控失败: " + e.getMessage());
             }
@@ -141,7 +141,7 @@ public class FileMonitorConfig implements WebSocketMessageBrokerConfigurer {
         @SendTo("/topic/log-monitor")
         public Map<String, Object> stopMonitor(Map<String, String> message) {
             try {
-                return fileMonitorService.stopMonitoring(message.get("fileName"));
+                return logFileRealTimeService.stopMonitoring(message.get("fileName"));
             } catch (Exception e) {
                 return Map.of("type", ERROR, MESSAGE, "停止监控失败: " + e.getMessage());
             }
@@ -157,7 +157,7 @@ public class FileMonitorConfig implements WebSocketMessageBrokerConfigurer {
         @SendTo("/topic/log-monitor")
         public Map<String, Object> getMonitorStatus(Map<String, String> message) {
             try {
-                return fileMonitorService.getMonitorStatus();
+                return logFileRealTimeService.getMonitorStatus();
             } catch (Exception e) {
                 return Map.of("type", ERROR, MESSAGE, "获取监控状态失败: " + e.getMessage());
             }

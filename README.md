@@ -2,7 +2,6 @@
 
 > 该组件可以自动记录方法的执行信息，包括执行时间、参数、返回值等，并提供日志文件监控和可视化功能。
 
-
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
 [![fork](https://gitee.com/wb04307201/methodTraceLog/badge/fork.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
@@ -18,7 +17,18 @@
     - 监控指标记录（基于Micrometer，可选）
 - **日志文件管理**：支持日志文件查询和下载
 - **实时日志查看**：通过WebSocket提供实时日志监控功能
-- **Web界面**：提供简单的Web界面查看日志文件
+- **可视化界面**：提供Web界面查看调用链和日志信息
+
+- **方法调用追踪**：自动记录方法调用链路，包括调用时间、耗时等信息
+- **多维度日志记录**：
+    - 简单日志记录（Simple Log，方法执行前、执行后和异常情况日志输出）
+    - 监控指标记录（Simple Monitor, 调用链追踪以及监控指标）
+- **文件日志管理**：
+    - 日志文件浏览
+    - 实时日志监控
+    - 日志文件下载
+- **可视化界面**：提供Web界面查看调用链和日志信息
+- **自定义扩展**：支持自定义日志服务实现
 
 ## 第一步 增加 JitPack 仓库
 ```xml
@@ -35,7 +45,7 @@
 <dependency>
     <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.11</version>
+    <version>1.0.12</version>
 </dependency>
 ```
 
@@ -45,10 +55,13 @@
 method-trace-log:
   log:
     enable: true          # 是否启用方法追踪，默认true
-    log: true             # 是否启用简单日志记录，默认true
-    monitor: true         # 是否启用监控指标记录，默认false
+    serviceCalls:        # 启动时便开启的日志服务，默认无需配置全部开启，生产环境可以配置全部关闭，在需要时可通过web界面开启
+      - name: SimpleLogService  # 日志输出服务
+        enable: false
+      - name: SimpleMonitorService  # 指标监控服务
+        enable: false
   file:
-    enable: true          # 是否启用文件相关功能，默认true
+    enable: true          # 是否启用日志文件相关功能，默认true
     path: ./logs          # 日志文件路径，默认为项目根目录下的logs文件夹，默认./logs
     allowed-extensions:   # 允许访问的文件扩展名，默认.log .txt .out
       - .log
@@ -56,7 +69,9 @@ method-trace-log:
       - .out
     max-lines: 1000       # 单次查询最大行数，默认1000
     max-file-size: 100    # 文件最大大小（MB)，默认100
-    # 日志文件匹配模式，默认(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
+    # 日志文件匹配模式, 
+    # 默认(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
+    # 匹配%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n日志输出格式
     log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
 management:
   endpoints:
@@ -93,7 +108,7 @@ management:
         include: methodtrace    # 启用监控的自定义端点
 ```
 
-通过URL访问内置方法调用监控面板: `http://localhost:8080/log/monitor/view`
+通过URL访问内置方法调用监控面板: `http://localhost:8080/methodTraceLog/view`
 ![img_1.png](img_1.png)
 ![img_2.png](img_2.png)
 
@@ -201,20 +216,34 @@ GET http://localhost:8080/actuator/methodtrace
 
 ## 日志文件管理
 
-通过URL访问日志文件查看器: `http://localhost:8080/log/file/view`
+通过URL访问日志文件查看器: `http://localhost:8080/methodTraceLog/logFile`
 ![img.png](img.png)
 
 
-## 可以继承[ICallService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/ICallService.java)接口并实现自定义日志数据据的处理
+## 可以继承[AbstractCallService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/AbstractCallService.java)接口并实现自定义日志数据据的处理
 
 ```java
-@Component
 @Slf4j
-public class CustomLogServiceImpl implements ILogService {
+public class CustomLogServiceImpl extends AbstractCallService {
+
+    public static final String LOG_TEMPLATE = "custom-log traceid: {}, pspanid: {}, spanid: {}, classname: {}, methodSignature: {}, context: {}, logActionEnum: {}, time: {}";
 
     @Override
-    public void log(String traceid, String pspanid, String spanid, String classname, String methodSignature, Object context, LogActionEnum logActionEnum) {
-        // 自定义实现
+    public void consumer(ServiceCallInfo serviceCallInfo) {
+        if (serviceCallInfo.getLogActionEnum() == LogActionEnum.AFTER_THROW)
+            log.error(LOG_TEMPLATE, serviceCallInfo.getTraceid(), serviceCallInfo.getPspanid(), serviceCallInfo.getSpanid(), serviceCallInfo.getClassName(), serviceCallInfo.getMethodSignature(), transContext(serviceCallInfo.getContext()), serviceCallInfo.getLogActionEnum(), serviceCallInfo.getTimeMillis());
+        else
+            log.info(LOG_TEMPLATE, serviceCallInfo.getTraceid(), serviceCallInfo.getPspanid(), serviceCallInfo.getSpanid(), serviceCallInfo.getClassName(), serviceCallInfo.getMethodSignature(), transContext(serviceCallInfo.getContext()), serviceCallInfo.getLogActionEnum(), serviceCallInfo.getTimeMillis());
+    }
+
+    @Override
+    public String getCallServiceName() {
+        return "CustomLog";
+    }
+
+    @Override
+    public String getCallServiceDesc() {
+        return "自定义日志";
     }
 }
 ```

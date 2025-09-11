@@ -1,6 +1,5 @@
-package cn.wubo.method.trace.log;
+package cn.wubo.method.trace.log.file.dto;
 
-import cn.wubo.method.trace.log.file.dto.LogQueryRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.springframework.util.StringUtils;

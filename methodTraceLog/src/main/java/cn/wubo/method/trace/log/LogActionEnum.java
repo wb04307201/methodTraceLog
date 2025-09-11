@@ -1,6 +1,7 @@
 package cn.wubo.method.trace.log;
 
 import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.ToString;
 
 @ToString
@@ -13,6 +14,7 @@ public enum LogActionEnum {
 
     AFTER_THROW("方法抛出异常");
 
+    @Getter
     private final String desc;
 
 }

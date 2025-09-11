@@ -14,11 +14,7 @@ import java.util.UUID;
 @Aspect
 public class LogAspect {
 
-    private List<ICallService> callServices;
-
-    public LogAspect(List<ICallService> callServices) {
-        this.callServices = callServices;
-    }
+    private  final CallServiceStrategy callServiceStrategy;
 
     /**
      * 日志跟踪id。
@@ -29,6 +25,10 @@ public class LogAspect {
      * 日志跨度id。
      */
     public static final String LOG_SPAN_ID = "spanid";
+
+    public LogAspect(CallServiceStrategy callServiceStrategy) {
+        this.callServiceStrategy = callServiceStrategy;
+    }
 
     /**
      * 环绕通知，应用于带有@Component、@Service或@RestController注解的类中的方法
@@ -44,8 +44,8 @@ public class LogAspect {
             "@within(org.springframework.web.bind.annotation.RestController)) && " +
             "!within(cn.wubo.method.trace.log.ICallService+) &&" +
             "!within(cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint) &&" +
-            "!within(cn.wubo.method.trace.log.file.FileService) &&" +
-            "!within(cn.wubo.method.trace.log.file.FileMonitorService)")
+            "!within(cn.wubo.method.trace.log.file.LogFileService) &&" +
+            "!within(cn.wubo.method.trace.log.file.LogFileRealTimeService)")
     public Object around(ProceedingJoinPoint jp) throws Throwable {
         Object returnValue;
         // 获取当前线程中已存在的跟踪ID
@@ -77,7 +77,7 @@ public class LogAspect {
 
         try {
             // 执行前置处理逻辑
-            callServices.forEach(callService -> callService.consumer(before));
+            callServiceStrategy.consumer(before);
             // 执行目标方法
             returnValue = jp.proceed();
 
@@ -85,13 +85,13 @@ public class LogAspect {
             after.setContext(returnValue);
             after.setLogActionEnum(LogActionEnum.AFTER_RETURN);
             after.setTimeMillis(System.currentTimeMillis());
-            callServices.forEach(callService -> callService.consumer(after));
+            callServiceStrategy.consumer(after);
         } catch (Exception e) {
             // 设置异常信息并执行后置异常处理逻辑
             after.setContext(e);
             after.setLogActionEnum(LogActionEnum.AFTER_THROW);
             after.setTimeMillis(System.currentTimeMillis());
-            callServices.forEach(callService -> callService.consumer(after));
+            callServiceStrategy.consumer(after);
             throw e;
         } finally {
             // 清理MDC上下文，防止线程复用造成数据污染
