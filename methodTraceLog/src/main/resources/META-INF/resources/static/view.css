@@ -359,7 +359,7 @@ tbody tr {
 }
 
 tbody tr:hover {
-    background-color: #f5f5f5;
+    background-color: rgba(102, 126, 234, 0.3);
 }
 
 tbody td {
@@ -369,11 +369,20 @@ tbody td {
 
 /* 斑马纹效果 */
 tbody tr:nth-child(even) {
-    background-color: #f9f9f9;
+    background-color: rgba(102, 126, 234, 0.2);
 }
 
 tbody tr:nth-child(even):hover {
-    background-color: #f0f0f0;
+    background-color: rgba(102, 126, 234, 0.3);
+}
+
+/* 响应式调整 - 在小屏幕上增加内边距 */
+@media (max-width: 768px) {
+    thead th,
+    tbody td {
+        padding: 8px 10px;
+        font-size: 14px;
+    }
 }
 
 /* 滚动条样式 */
@@ -399,13 +408,4 @@ tbody tr:nth-child(even):hover {
 ::selection {
     background: rgba(102, 126, 234, 0.3);
     color: #2d3748;
-}
-
-/* 响应式调整 - 在小屏幕上增加内边距 */
-@media (max-width: 768px) {
-    thead th,
-    tbody td {
-        padding: 8px 10px;
-        font-size: 14px;
-    }
 }
