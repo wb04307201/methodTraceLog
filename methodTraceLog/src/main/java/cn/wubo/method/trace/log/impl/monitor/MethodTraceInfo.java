@@ -1,6 +1,5 @@
 package cn.wubo.method.trace.log.impl.monitor;
 
-import cn.wubo.method.trace.log.LogActionEnum;
 import cn.wubo.method.trace.log.ServiceCallInfo;
 import lombok.Data;
 

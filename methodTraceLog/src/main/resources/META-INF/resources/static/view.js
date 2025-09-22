@@ -266,6 +266,7 @@ function createNodeElement(nodeData) {
         labelElem.textContent = label + ':';
 
         const valueElem = document.createElement('span');
+        valueElem.className = 'node-info-value';
         valueElem.textContent = value;
 
         item.appendChild(labelElem);
