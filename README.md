@@ -45,7 +45,7 @@
 <dependency>
     <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.12</version>
+    <version>1.0.13</version>
 </dependency>
 ```
 
