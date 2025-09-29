@@ -8,8 +8,7 @@ import cn.wubo.method.trace.log.ai.TimeComplexity;
 import cn.wubo.method.trace.log.impl.log.SimpleLogServiceImpl;
 import cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint;
 import cn.wubo.method.trace.log.impl.monitor.SimpleMonitorServiceImpl;
-import cn.wubo.method.trace.log.utils.DecompilerUtil;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import cn.wubo.method.trace.log.utils.DecompilerUtils;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
@@ -90,7 +89,7 @@ public class LogConfig {
                 .defaultAdvisors(
                         SimpleLoggerAdvisor.builder().build() // logger advisor
                 );
-        return new TimeComplexity(builder.build(),properties.getAi());
+        return new TimeComplexity(builder.build(), properties.getAi());
     }
 
     @Bean("wb04307201MethodTraceLogAiRouter")
@@ -114,13 +113,7 @@ public class LogConfig {
         builder.GET("/methodTraceLog/view/methodSourceCode", request -> {
                     String className = request.param("className").orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "className is required"));
                     String methodName = request.param("methodName").orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "methodName is required"));
-                    return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(DecompilerUtil.decompile(className, methodName));
-                }
-        );
-        builder.GET("/methodTraceLog/view/methodSourceCode", request -> {
-                    String className = request.param("className").orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "className is required"));
-                    String methodName = request.param("methodName").orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "methodName is required"));
-                    return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(DecompilerUtil.decompile(className, methodName));
+                    return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(DecompilerUtils.removeAnnotations(DecompilerUtils.decompile(className, methodName)));
                 }
         );
 

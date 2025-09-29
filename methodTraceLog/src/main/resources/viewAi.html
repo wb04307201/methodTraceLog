@@ -90,12 +90,22 @@
                         <button id="ana-code-btn" class="btn btn-primary" style="width: 100%">分析代码</button>
                     </div>
                     <div class="ana-container-item">
-                        <!-- 添加加载状态显示 -->
-                        <div id="analysis-loading" class="loading" style="display: none;">
-                            <div class="spinner"></div>
-                            <p>正在分析代码，请稍候...</p>
+                        <div id="analysis-waiting" class="loading" style="display: block;">
+                            <div class="analysis-placeholder">
+                                <div class="placeholder-icon">💡</div>
+                                <p class="placeholder-text">请点击"分析代码"按钮开始分析</p>
+                                <div class="placeholder-hint">AI将为您提供代码的时间复杂度分析和优化建议</div>
+                            </div>
                         </div>
-                        <div id="analysis-tabs-container" class="tabs-container">
+                        <div id="analysis-loading" class="loading" style="display: none;">
+                            <div class="analysis-placeholder">
+                                <div class="spinner"></div>
+                                <p class="placeholder-text">正在分析代码，请稍候...</p>
+                                <div class="placeholder-hint">• 提供详细的复杂度分析和优化建议</div>
+                                <div class="placeholder-hint">• 可视化展示算法性能特征</div>
+                            </div>
+                        </div>
+                        <div id="analysis-tabs-container" class="tabs-container" style="display: none">
                             <div class="tabs-header">
                                 <div class="tab-item active" data-tab="overview">总览</div>
                                 <div class="tab-item" data-tab="visual">可视化</div>

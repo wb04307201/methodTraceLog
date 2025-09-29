@@ -1,8 +1,5 @@
 package cn.wubo.method.trace.log;
 
-import cn.wubo.method.trace.log.AbstractCallService;
-import cn.wubo.method.trace.log.LogActionEnum;
-import cn.wubo.method.trace.log.ServiceCallInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 

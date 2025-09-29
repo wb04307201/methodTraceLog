@@ -1,6 +1,7 @@
 package cn.wubo.method.trace.log.ai;
 
 import cn.wubo.method.trace.log.MethodTraceLogProperties;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,7 +18,7 @@ public class TimeComplexity {
     public TimeComplexity(ChatClient client, MethodTraceLogProperties.AiProperties properties) {
         this.client = client;
         this.properties = properties;
-        this.mapper = new ObjectMapper();
+        this.mapper = new ObjectMapper().enable(JsonParser.Feature.ALLOW_COMMENTS);
     }
 
     public JsonNode analyze(String code) throws JsonProcessingException {

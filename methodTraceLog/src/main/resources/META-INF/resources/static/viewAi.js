@@ -37,8 +37,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // 关闭弹出框（点击 × 按钮）
     document.getElementById("modal-ana-close-btn").addEventListener("click", () => {
         modalAna.style.display = "none";
+        document.getElementById('analysis-waiting').style.display = 'block';
         document.getElementById('analysis-loading').style.display = 'none';
-        document.getElementById('analysis-tabs-container').style.display = 'block';
+        document.getElementById('analysis-tabs-container').style.display = 'none';
     });
 
     // 分析代码事件
@@ -377,6 +378,7 @@ function updateCallMethods(name, enable) {
 
 function anaCode(){
     // 显示加载状态，隐藏分析内容
+    document.getElementById('analysis-waiting').style.display = 'none';
     document.getElementById('analysis-loading').style.display = 'block';
     document.getElementById('analysis-tabs-container').style.display = 'none';
 
@@ -401,13 +403,16 @@ function anaCode(){
             updateOptimizationSuggestions(data.suggestions)
 
             // 隐藏加载状态，显示分析结果
+
+            document.getElementById('analysis-waiting').style.display = 'none';
             document.getElementById('analysis-loading').style.display = 'none';
             document.getElementById('analysis-tabs-container').style.display = 'block';
         })
         .catch(error => {
             showToast('❌ 发生异常: ' + error.message);
+            document.getElementById('analysis-waiting').style.display = 'block';
             document.getElementById('analysis-loading').style.display = 'none';
-            document.getElementById('analysis-tabs-container').style.display = 'block';
+            document.getElementById('analysis-tabs-container').style.display = 'none';
         })
 }
 

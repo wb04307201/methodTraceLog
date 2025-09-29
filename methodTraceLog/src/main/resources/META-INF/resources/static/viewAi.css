@@ -844,6 +844,29 @@ tbody tr:nth-child(even):hover {
     justify-content: center;
 }
 
+.analysis-placeholder {
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+}
+
+.placeholder-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+}
+
+.placeholder-text {
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.placeholder-hint {
+    font-size: 14px;
+    color: #999;
+}
+
+
 .spinner {
     border: 4px solid rgba(0, 0, 0, 0.1);
     border-radius: 50%;
