@@ -1,6 +1,9 @@
-package cn.wubo.entity.sql;
+package cn.wubo.method.trace.log;
 
 import org.springframework.stereotype.Component;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import static java.lang.Thread.sleep;
 

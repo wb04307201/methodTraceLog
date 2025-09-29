@@ -34,9 +34,12 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-boot.version>3.5.3</spring-boot.version>
+        <spring-boot.version>3.5.6</spring-boot.version>
+        <spring-ai.version>1.0.1</spring-ai.version>
         <lombok.version>1.18.38</lombok.version>
         <logback.version>1.5.18</logback.version>
+        <javassist.version>3.30.2-GA</javassist.version>
+        <cfr.version>0.152</cfr.version>
     </properties>
 
     <dependencyManagement>
@@ -49,6 +52,13 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok</artifactId>
                 <version>${lombok.version}</version>
@@ -57,6 +67,21 @@
                 <groupId>ch.qos.logback</groupId>
                 <artifactId>logback-classic</artifactId>
                 <version>${logback.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.javassist</groupId>
+                <artifactId>javassist</artifactId>
+                <version>${javassist.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.vineflower</groupId>
+                <artifactId>vineflower</artifactId>
+                <version>${vineflower.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.benf</groupId>
+                <artifactId>cfr</artifactId>
+                <version>${cfr.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

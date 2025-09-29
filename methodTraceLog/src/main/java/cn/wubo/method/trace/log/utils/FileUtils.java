@@ -1,16 +1,16 @@
 package cn.wubo.method.trace.log.utils;
 
-public class FileUtils {
+import lombok.experimental.UtilityClass;
 
-    private FileUtils() {
-    }
+@UtilityClass
+public class FileUtils {
 
     /**
      * 对文件名进行安全检查，防止路径遍历攻击和非法文件名
      * @param fileName 待检查的文件名字符串
      * @throws IllegalArgumentException 当文件名为空、过长、包含非法字符或路径遍历序列时抛出
      */
-    public static void pathInspection(String fileName) {
+    public void pathInspection(String fileName) {
         // 检查输入是否为null或空
         if (fileName == null || fileName.isEmpty()) {
             throw new IllegalArgumentException("Filename cannot be null or empty");
