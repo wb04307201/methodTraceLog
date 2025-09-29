@@ -1,4 +1,6 @@
 let refreshIntervalId;
+let modal;
+let modalAna;
 
 document.addEventListener('DOMContentLoaded', function () {
     // 首次加载数据
@@ -26,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    modal = document.getElementById("modal");
     // 关闭弹出框（点击 × 按钮）
     document.querySelector(".close-btn").addEventListener("click", () => {
         modal.style.display = "none";
@@ -36,13 +39,11 @@ function loadData() {
     fetch('/methodTraceLog/view/callServices')
         .then(response => response.json())
         .then(data => {
-            console.log(data)
             updateCallServices(data);
         })
         .catch(error => {
-            console.error('加载数据失败:', error);
-            alert('加载数据失败，请稍后重试');
-        });
+            showToast('❌ 发生异常: ' + error.message);
+        })
 
     fetch('/actuator/methodtrace')
         .then(response => response.json())
@@ -51,9 +52,8 @@ function loadData() {
             updateTable(data);
         })
         .catch(error => {
-            console.error('加载数据失败:', error);
-            alert('加载数据失败，请稍后重试');
-        });
+            showToast('❌ 发生异常: ' + error.message);
+        })
 
     fetch('/methodTraceLog/view/list')
         .then(response => response.json())
@@ -61,9 +61,8 @@ function loadData() {
             updateMethodTable(data);
         })
         .catch(error => {
-            console.error('加载数据失败:', error);
-            alert('加载数据失败，请稍后重试');
-        });
+            showToast('❌ 发生异常: ' + error.message);
+        })
 }
 
 function updateSummary(data) {
@@ -197,18 +196,17 @@ function updateMethodTable(data) {
 }
 
 function openModal(id) {
-    fetch('/methodTraceLog/view/traceid?id=' + id)
+    fetch(`/methodTraceLog/view/traceid?id=${id}`)
         .then(response => response.json())
         .then(data => {
-            const container = document.getElementById('tree-container');
+            const container = document.getElementById('modal-container');
             container.innerHTML = '';
             createTree(data, container);
 
-            const modal = document.getElementById("modal");
             modal.style.display = 'block';
         })
         .catch(error => {
-            console.error('加载数据失败:', error);
+            showToast('❌ 发生异常: ' + error.message);
         })
 }
 
@@ -319,6 +317,22 @@ function updateCallMethods(name, enable) {
             updateCallServices(data)
         })
         .catch(error => {
-            console.error('加载数据失败:', error);
+            showToast('❌ 发生异常: ' + error.message);
         })
+}
+
+/**
+ * 显示Toast提示消息
+ * @param {string} message - 要显示的提示消息内容
+ * @returns {void}
+ */
+function showToast(message) {
+    var toast = document.getElementById("toast");
+    toast.innerHTML = message;
+    toast.className = "show";
+
+    // 3秒后自动关闭
+    setTimeout(function(){
+        toast.className = toast.className.replace("show", "");
+    }, 3000);
 }

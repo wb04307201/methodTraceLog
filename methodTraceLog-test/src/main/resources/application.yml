@@ -18,3 +18,14 @@ management:
     web:
       exposure:
         include: methodtrace
+spring:
+  ai:
+    ollama:
+      chat:
+        options:
+#          model: gemma3
+          model: qwen3
+#          model: deepseek-r1
+      base-url: http://localhost:11434
+
+

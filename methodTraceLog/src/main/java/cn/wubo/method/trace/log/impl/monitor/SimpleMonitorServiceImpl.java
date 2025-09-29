@@ -45,7 +45,7 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
             } else if (methodTraceInfoMap.containsKey(serviceCallInfo.getPspanid()))
                 methodTraceInfoMap.get(serviceCallInfo.getPspanid()).addChild(methodTraceInfo);
         } else if (serviceCallInfo.getLogActionEnum() == LogActionEnum.AFTER_RETURN || serviceCallInfo.getLogActionEnum() == LogActionEnum.AFTER_THROW) {
-            timerSamples.get(serviceCallInfo.getSpanid()).stop(Timer.builder(METHOD_EXECUTION_TIME).tags(CLASS_NAME, serviceCallInfo.getClassName(), METHOD_SIGNATURE, serviceCallInfo.getMethodSignature(), ACTION, serviceCallInfo.getLogActionEnum().name()).register(meterRegistry));
+            timerSamples.get(serviceCallInfo.getSpanid()).stop(Timer.builder(METHOD_EXECUTION_TIME).tags(CLASS_NAME, serviceCallInfo.getClassName(), METHOD_SIGNATURE, serviceCallInfo.getMethodSignatureLongString(), ACTION, serviceCallInfo.getLogActionEnum().name()).register(meterRegistry));
 
             if (methodTraceInfoMap.containsKey(serviceCallInfo.getSpanid())) {
                 MethodTraceInfo methodTraceInfo = methodTraceInfoMap.get(serviceCallInfo.getSpanid());

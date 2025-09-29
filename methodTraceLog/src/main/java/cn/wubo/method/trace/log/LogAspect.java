@@ -64,15 +64,8 @@ public class LogAspect {
         MDC.put(LOG_TRACE_ID, traceid);
         MDC.put(LOG_SPAN_ID, spanid);
 
-        // 提取目标方法的签名信息
-        MethodSignature methodSignature = (MethodSignature) jp.getSignature();
-        // 获取目标类名
-        String className = methodSignature.getMethod().getDeclaringClass().getName();
-        // 获取方法完整签名字符串
-        String methodSignatureString = methodSignature.toLongString();
-
         // 构建方法调用前的服务调用信息
-        ServiceCallInfo before = new ServiceCallInfo(traceid, pspanid, spanid, className, methodSignatureString, jp.getArgs(), LogActionEnum.BEFORE, System.currentTimeMillis());
+        ServiceCallInfo before = new ServiceCallInfo(traceid, pspanid, spanid, (MethodSignature) jp.getSignature(), jp.getArgs(), LogActionEnum.BEFORE, System.currentTimeMillis());
         ServiceCallInfo after = before.clone();
 
         try {

@@ -1,4 +1,4 @@
-package cn.wubo.entity.sql;
+package cn.wubo.method.trace.log;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static java.lang.Thread.sleep;
@@ -38,6 +39,11 @@ public class TestController {
     @PostMapping("/post")
     public ResponseEntity<Map<String, String>> post(@RequestBody Map<String, String> map) {
         return ResponseEntity.ok().body(map);
+    }
+
+    @GetMapping("/twoSum")
+    public int[] twoSum(@RequestParam("nums") int[] nums, @RequestParam("target") int target) {
+        return testService.twoSum(nums,target);
     }
 
     @PostMapping("/upload")
