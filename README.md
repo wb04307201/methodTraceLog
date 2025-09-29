@@ -1,6 +1,6 @@
 # Method Trace Log - 方法追踪日志
 
-> 一个用于方法追踪日志的starter组件，提供方法调用链路追踪、性能监控、日志文件管理和时间复杂度分析等功能。
+>  一个用于方法追踪日志的starter组件，提供方法调用链路追踪、性能监控、日志文件管理和（可选的）AI时间复杂度分析等功能。
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
