@@ -14,7 +14,7 @@ import java.net.URL;
 @Slf4j
 public class DecompilerUtil {
 
-    public static String decompile(String className, String methodName) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, ClassNotFoundException, UnsupportedEncodingException {
+    public String decompile(String className, String methodName) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, ClassNotFoundException, UnsupportedEncodingException {
         // 获取类的 .class 文件路径
         Class<?> clazz = Class.forName(className);
         String classResource = clazz.getName().replace('.', '/') + ".class";

@@ -85,12 +85,12 @@ public class LogConfig {
 
     @Bean
     @ConditionalOnBean(ChatModel.class)
-    public TimeComplexity timeComplexity(ChatModel chatModel) {
+    public TimeComplexity timeComplexity(ChatModel chatModel, MethodTraceLogProperties properties) {
         ChatClient.Builder builder = ChatClient.builder(chatModel)
                 .defaultAdvisors(
                         SimpleLoggerAdvisor.builder().build() // logger advisor
                 );
-        return new TimeComplexity(builder.build());
+        return new TimeComplexity(builder.build(),properties.getAi());
     }
 
     @Bean("wb04307201MethodTraceLogAiRouter")
