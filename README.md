@@ -1,6 +1,10 @@
-# Method Trace Log - 方法追踪日志
+# Method Trace Log
 
->  一个用于方法追踪日志的starter组件，提供方法调用链路追踪、性能监控、日志文件管理和（可选的）AI时间复杂度分析等功能。
+<div align="right">
+  English | <a href="README.zh-CN.md">中文</a>
+</div>
+
+> A starter component for method tracing logs, providing method call chain tracking, performance monitoring, log file management, and (optional) AI time complexity analysis.
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
@@ -11,33 +15,35 @@
 
 ---
 
+[中文文档](README.zh-CN.md)
+
 ![gif.gif](gif.gif)
 
-## 功能特性
+## Features
 
-### 方法追踪
-- 自动记录方法调用链路
-- 支持方法执行时间统计
-- 可视化展示调用关系和耗时
-- 支持异常捕获和记录
+### Method Tracing
+- Automatic recording of method call chains
+- Support for method execution time statistics
+- Visual display of call relationships and time consumption
+- Support for exception capture and recording
 
-### 日志文件管理
-- 实时查看日志文件内容
-- 支持日志文件下载
-- 日志内容搜索和过滤
-- WebSocket实时日志推送
+### Log File Management
+- Real-time viewing of log file contents
+- Support for log file download
+- Log content search and filtering
+- WebSocket real-time log push
 
-### AI代码分析（可选）
-- 时间复杂度分析
-- 性能优化建议
-- 代码质量评估
-- 可视化分析结果展示
+### AI Code Analysis (Optional)
+- Time complexity analysis
+- Performance optimization suggestions
+- Code quality assessment
+- Visual analysis result display
 
 ---
 
-## 引入
+## Getting Started
 
-### 增加 JitPack 仓库
+### Add JitPack Repository
 ```xml
 <repositories>
     <repository>
@@ -47,7 +53,7 @@
 </repositories>
 ```
 
-### Maven依赖
+### Maven Dependency
 ```xml
 <dependency>
     <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
@@ -56,40 +62,40 @@
 </dependency>
 ```
 
-### 配置文件
-添加配置:
+### Configuration
+Add configuration:
 ```yaml
 method-trace-log:
   log:
-    enable: true          # 是否启用方法追踪，默认true
-    serviceCalls:        # 启动时便开启的日志服务，默认无需配置全部开启，生产环境可以配置全部关闭，在需要时可通过web界面开启
-      - name: SimpleLogService  # 日志输出服务
+    enable: true          # Whether to enable method tracing, default is true
+    serviceCalls:        # Log services enabled at startup, by default all are enabled without configuration. In production environments, all can be configured to be disabled and enabled through the web interface when needed
+      - name: SimpleLogService  # Log output service
         enable: false
-      - name: SimpleMonitorService  # 指标监控服务
+      - name: SimpleMonitorService  # Metrics monitoring service
         enable: false
   file:
-    enable: true          # 是否启用文件相关功能，默认true
-    path: ./logs          # 日志文件路径
-    allowed-extensions:   # 允许访问的文件扩展名
+    enable: true          # Whether to enable file-related functions, default is true
+    path: ./logs          # Log file path
+    allowed-extensions:   # Allowed file extensions
       - .log
       - .txt
       - .out
-    max-lines: 1000       # 单次查询最大行数
-    max-file-size: 100    # 文件最大大小（MB）
-    # 日志文件匹配模式, 
-    # 默认(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
-    # 匹配%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n日志输出格式
+    max-lines: 1000       # Maximum lines per query
+    max-file-size: 100    # Maximum file size (MB)
+    # Log file matching pattern,
+    # Default: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
+    # Matches %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n log output format
     log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
 management:
   endpoints:
     web:
       exposure:
-        include: methodtrace # 开启自定义端点
+        include: methodtrace # Enable custom endpoint
 ```
 
-### AI分析配置（可选）
+### AI Analysis Configuration (Optional)
 
-如果需要使用AI代码分析功能，需要引入和配置Spring AI，下面以通过ollama调用qwen3为例：
+To use the AI code analysis feature, you need to introduce and configure Spring AI. The following example shows how to call qwen3 through ollama:
 ```xml
 <dependencyManagement>
     <dependencies>
@@ -116,30 +122,30 @@ spring:
     ollama:
       chat:
         options:
-          model: qwen3    # 使用的模型
+          model: qwen3    # Model used
       base-url: http://localhost:11434
 ```
 
-## 使用
+## Usage
 
-### 默认输出方的法日志：
+### Default Method Log Output:
 ```
-2025-08-18T10:59:45.638+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: null, spanid: a52a7934-88d3-44e9-bcf5-1469a0364493, classname: cn.wubo.method.trace.log.TestController, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestController.get(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1755485985638
-2025-08-18T10:59:45.644+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: a52a7934-88d3-44e9-bcf5-1469a0364493, spanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, classname: cn.wubo.method.trace.log.TestService, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestService.hello(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1755485985644
-2025-08-18T10:59:45.647+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, spanid: 4c1ba448-612b-463a-8f75-a3eb6262e37f, classname: cn.wubo.method.trace.log.TestComponent, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestComponent.hello(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1755485985647
-2025-08-18T10:59:45.647+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, spanid: 4c1ba448-612b-463a-8f75-a3eb6262e37f, classname: cn.wubo.method.trace.log.TestComponent, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestComponent.hello(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1755485985647
-2025-08-18T10:59:45.648+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: a52a7934-88d3-44e9-bcf5-1469a0364493, spanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, classname: cn.wubo.method.trace.log.TestService, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestService.hello(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1755485985648
-2025-08-18T10:59:45.648+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: null, spanid: a52a7934-88d3-44e9-bcf5-1469a0364493, classname: cn.wubo.method.trace.log.TestController, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestController.get(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1755485985648
+2025-08-18T10:59:45.638+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: null, spanid: a52a7934-88d3-44e9-bcf5-1469a0364493, classname: cn.wubo.method.trace.log.TestController, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestController.get(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=Method execution before), time: 1755485985638
+2025-08-18T10:59:45.644+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: a52a7934-88d3-44e9-bcf5-1469a0364493, spanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, classname: cn.wubo.method.trace.log.TestService, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestService.hello(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=Method execution before), time: 1755485985644
+2025-08-18T10:59:45.647+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, spanid: 4c1ba448-612b-463a-8f75-a3eb6262e37f, classname: cn.wubo.method.trace.log.TestComponent, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestComponent.hello(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=Method execution before), time: 1755485985647
+2025-08-18T10:59:45.647+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, spanid: 4c1ba448-612b-463a-8f75-a3eb6262e37f, classname: cn.wubo.method.trace.log.TestComponent, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestComponent.hello(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=Method execution after), time: 1755485985647
+2025-08-18T10:59:45.648+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: a52a7934-88d3-44e9-bcf5-1469a0364493, spanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, classname: cn.wubo.method.trace.log.TestService, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestService.hello(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=Method execution after), time: 1755485985648
+2025-08-18T10:59:45.648+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: null, spanid: a52a7934-88d3-44e9-bcf5-1469a0364493, classname: cn.wubo.method.trace.log.TestController, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestController.get(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=Method execution after), time: 1755485985648
 ```
 
-追踪id - traceid
-跨度id - spanid
-父跨度id - pspanid
-通过traceid，spanid，pspanid可以追踪调用链
+Trace ID - traceid
+Span ID - spanid
+Parent Span ID - pspanid
+The call chain can be traced through traceid, spanid, and pspanid
 
 
-### 使用监控面板和Actuator集成
-项目集成了Spring Boot Actuator，可以通过以下自定义端点查看监控信息：
+### Using Monitoring Panel and Actuator Integration
+The project integrates Spring Boot Actuator, and you can view monitoring information through the following custom endpoint:
 ```yaml
 management:
   endpoints:
@@ -148,25 +154,25 @@ management:
         include: methodtrace
 ```
 
-**注意**：*配置开启methodtrace使用监控面板的全部功能*
+**Note**: *Configure to enable methodtrace to use all functions of the monitoring panel*
 
-通过URL访问内置方法调用监控面板: `http://localhost:8080/methodTraceLog/view`
+Access the built-in method call monitoring panel via URL: `http://localhost:8080/methodTraceLog/view`
 ![img.png](img.png)
 ![img_1.png](img_1.png)
-如果配置了AI分析功能。则可以分析方法的时间复杂度以及优化建议
+If AI analysis function is configured, you can analyze the time complexity of methods and optimization suggestions
 ![img_2.png](img_2.png)
 ![img_3.png](img_3.png)
 ![img_4.png](img_4.png)
 ![img_5.png](img_5.png)
 
 
-### 使用日志文件管理
+### Using Log File Management
 
-通过URL访问日志文件查看器: `http://localhost:8080/methodTraceLog/logFile`
+Access the log file viewer via URL: `http://localhost:8080/methodTraceLog/logFile`
 ![img_6.png](img_6.png)
 
 
-### 可以继承[AbstractCallService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/AbstractCallService.java)接口并实现自定义日志数据据的处理
+### You can extend [AbstractCallService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/AbstractCallService.java) and implement custom log data processing
 
 ```java
 @Slf4j
@@ -189,12 +195,7 @@ public class CustomLogServiceImpl extends AbstractCallService {
 
     @Override
     public String getCallServiceDesc() {
-        return "自定义日志";
+        return "Custom Log";
     }
 }
 ```
-
-
-
-
-
