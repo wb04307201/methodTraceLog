@@ -143,7 +143,7 @@ spring:
 
 
 ### 使用监控面板和Actuator集成
-项目集成了Spring Boot Actuator，可以通过以下自定义端点查看监控信息：
+项目集成了Spring Boot Actuator，需要配置暴露methodtrace端点才能使用监控面板全部功能：
 ```yaml
 management:
   endpoints:
@@ -151,8 +151,6 @@ management:
       exposure:
         include: methodtrace
 ```
-
-**注意**：*配置开启methodtrace使用监控面板的全部功能*
 
 通过URL访问内置方法调用监控面板: `http://localhost:8080/methodTraceLog/view`
 ![img.png](img.png)
