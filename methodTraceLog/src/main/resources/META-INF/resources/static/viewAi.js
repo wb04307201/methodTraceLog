@@ -44,6 +44,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 分析代码事件
     document.getElementById('ana-code-btn').addEventListener('click', anaCode);
+
+    document.getElementById('export-json-btn').addEventListener('click', exportJsonData);
+
 });
 
 // Tabs切换功能
@@ -168,7 +171,6 @@ function updateTable(data) {
 }
 
 function openModala(className, methodSignature) {
-    console.log(className, methodSignature)
     modalAna.style.display = "block";
 
     let methodName = methodSignature.split(' ').pop().replace(className + '.', '').split('(')[0];
@@ -376,7 +378,10 @@ function updateCallMethods(name, enable) {
         })
 }
 
+let anaData;
+
 function anaCode(){
+    anaData = null;
     // 显示加载状态，隐藏分析内容
     document.getElementById('analysis-waiting').style.display = 'none';
     document.getElementById('analysis-loading').style.display = 'block';
@@ -391,7 +396,7 @@ function anaCode(){
         })
         .then(response => response.json())
         .then(data => {
-            console.log(data)
+            anaData = data;
 
             document.getElementById("complexity-value").textContent = data.overallComplexity
             updateConfidenceProgress(data.confidence)
@@ -475,9 +480,11 @@ function updatePerformanceRating(ratingText) {
     }
 }
 
-let complexityChart
+let complexityChart;
+
 function updateComplexityChart(chartData) {
-    if(complexityChart)
+    // 正确销毁已存在的图表实例
+    if (complexityChart)
         complexityChart.destroy();
 
     // 按复杂度分组数据
@@ -508,7 +515,7 @@ function updateComplexityChart(chartData) {
 
     // 创建图表
     const ctx = document.getElementById('complexityChart').getContext('2d');
-    myChart = new Chart(ctx, {
+    complexityChart = new Chart(ctx, {
         type: 'line',
         data: {
             datasets: datasets
@@ -699,6 +706,26 @@ function showToast(message) {
     setTimeout(function(){
         toast.className = toast.className.replace("show", "");
     }, 3000);
+}
+
+function exportJsonData(){
+    if(anaData!=null){
+        var jsonString = JSON.stringify(anaData);
+
+        // 创建Blob对象
+        const blob = new Blob([jsonString], { type: 'application/json' });
+
+        // 创建下载链接
+        const downloadLink = document.createElement('a');
+        downloadLink.href = URL.createObjectURL(blob);
+        downloadLink.download = 'ana-data.json'; // 设置文件名
+
+        // 触发下载
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+    }
+
 }
 
 

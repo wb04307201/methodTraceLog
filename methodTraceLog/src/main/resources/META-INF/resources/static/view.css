@@ -208,10 +208,6 @@ body {
     color: #999;
 }
 
-table {
-    font-size: 0.9rem;
-}
-
 /* 弹出框背景（半透明遮罩） */
 .modal {
     display: none; /* 默认隐藏 */
@@ -378,6 +374,7 @@ table {
 /* 表格基础样式 */
 table {
     width: 100%;
+    font-size: 0.9rem;
     border-collapse: collapse;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
@@ -466,15 +463,15 @@ tbody tr:nth-child(even):hover {
 
 #toast.show {
     visibility: visible;
-    animation: fadein 0.5s, fadeout 0.5s 2.5s;
+    animation: toastfadein 0.5s, toastfadeout 0.5s 2.5s;
 }
 
-@keyframes fadein {
+@keyframes toastfadein {
     from {top: 0; opacity: 0;}
     to {top: 30px; opacity: 1;}
 }
 
-@keyframes fadeout {
+@keyframes toastfadeout {
     from {top: 30px; opacity: 1;}
     to {top: 0; opacity: 0;}
 }
