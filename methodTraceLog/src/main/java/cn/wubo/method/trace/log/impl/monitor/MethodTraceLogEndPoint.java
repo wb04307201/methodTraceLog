@@ -20,6 +20,15 @@ public class MethodTraceLogEndPoint {
         this.meterRegistry = meterRegistry;
     }
 
+        /**
+     * 获取所有方法的执行统计信息。
+     * <p>
+     * 该方法通过查询注册表中的 Timer 指标，收集所有标记为 "method.execution.time" 的方法执行时间数据，
+     * 并根据类名和方法签名进行分组统计。统计内容包括成功调用次数、失败调用次数、平均成功时间、
+     * 平均失败时间、总调用次数以及成功率和失败率。
+     *
+     * @return 包含所有方法统计信息的 DTO 列表，每个 DTO 对应一个唯一的方法（由类名和方法签名标识）
+     */
     @ReadOperation
     public List<MethodStatisticsDTO> getAllMethodMetrics() {
         // 获取所有方法执行时间的 Timer
@@ -72,6 +81,7 @@ public class MethodTraceLogEndPoint {
 
         return new ArrayList<>(metricsMap.values());
     }
+
 
     @Data
     public class MethodStatisticsDTO {

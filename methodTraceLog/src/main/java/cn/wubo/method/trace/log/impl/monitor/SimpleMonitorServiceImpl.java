@@ -31,6 +31,8 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
 
     private Map<String, MethodTraceInfo> methodTraceInfoMap = new ConcurrentHashMap<>();
 
+    private static final long MAX_LOG_AGE_MILLIS = 8 * 60 * 60 * 1000; // 8小时
+
     @Override
     public void consumer(ServiceCallInfo serviceCallInfo) {
         if (serviceCallInfo.getLogActionEnum() == LogActionEnum.BEFORE) {
@@ -40,7 +42,7 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
             MethodTraceInfo methodTraceInfo = MethodTraceInfo.create(serviceCallInfo);
             methodTraceInfoMap.put(serviceCallInfo.getSpanid(), methodTraceInfo);
             if (serviceCallInfo.getPspanid() == null) {
-                if (methodTraceInfos.size() > 100) methodTraceInfos.remove(0);
+                cleanupExpiredEntries();
                 methodTraceInfos.add(methodTraceInfo);
             } else if (methodTraceInfoMap.containsKey(serviceCallInfo.getPspanid()))
                 methodTraceInfoMap.get(serviceCallInfo.getPspanid()).addChild(methodTraceInfo);
@@ -52,9 +54,19 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
                 methodTraceInfo.end(serviceCallInfo);
                 methodTraceInfoMap.remove(serviceCallInfo.getSpanid());
             }
-
         }
     }
+
+    private void cleanupExpiredEntries() {
+        long currentTime = System.currentTimeMillis();
+        methodTraceInfos.removeIf(info -> {
+            if (info == null || info.getBefore() == null) {
+                return true;
+            }
+            return currentTime - info.getBefore().getTimeMillis() >= MAX_LOG_AGE_MILLIS;
+        });
+    }
+
 
     @Override
     public String getCallServiceName() {
