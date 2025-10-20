@@ -15,8 +15,6 @@
 
 ---
 
-[中文文档](README.zh-CN.md)
-
 ![gif.gif](gif.gif)
 
 ## Features
@@ -58,7 +56,7 @@
 <dependency>
     <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.15</version>
+    <version>1.0.16</version>
 </dependency>
 ```
 
@@ -162,11 +160,13 @@ If AI analysis function is configured, you can analyze the time complexity of me
 ![img_3.png](img_3.png)
 ![img_4.png](img_4.png)
 ![img_5.png](img_5.png)
+If AI analysis functionality is configured, it is possible to analyze call chain performance and provide optimization suggestions.
+![img_6.png](img_6.png)
 
 ### Using log file management
 
 Access the log file viewer via URL: `http://localhost:8080/methodTraceLog/logFile`
-![img_6.png](img_6.png)
+![img_6.png](img_7.png)
 
 ### You can extend the [AbstractCallService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/AbstractCallService.java) interface and implement custom log data processing
 

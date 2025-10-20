@@ -24,7 +24,7 @@ public class TestService {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return testComponent.hello(name);
+        return testComponent.hello2(testComponent.hello1(testComponent.hello(name)));
     }
 
     public int[] twoSum(int[] nums, int target) {
