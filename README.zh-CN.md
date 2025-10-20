@@ -4,7 +4,7 @@
   <a href="README.md">English</a> | 中文
 </div>
 
->  一个用于方法追踪日志的starter组件，提供方法调用链路追踪、性能监控、日志文件管理和（可选的）AI时间复杂度分析等功能。
+>  一个用于方法追踪日志的starter组件，提供方法调用链路追踪、性能监控、日志文件管理和（可选的）AI时间复杂度分析、AI调用链分析等功能。
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
@@ -56,7 +56,7 @@
 <dependency>
     <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.15</version>
+    <version>1.0.16</version>
 </dependency>
 ```
 
@@ -160,12 +160,14 @@ management:
 ![img_3.png](img_3.png)
 ![img_4.png](img_4.png)
 ![img_5.png](img_5.png)
+如果配置了AI分析功能。则可以分析调用链路性能以及优化建
+![img_6.png](img_6.png)
 
 
 ### 使用日志文件管理
 
 通过URL访问日志文件查看器: `http://localhost:8080/methodTraceLog/logFile`
-![img_6.png](img_6.png)
+![img_7.png](img_7.png)
 
 
 ### 可以继承[AbstractCallService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/AbstractCallService.java)接口并实现自定义日志数据据的处理

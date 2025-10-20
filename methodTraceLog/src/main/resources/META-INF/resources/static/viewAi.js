@@ -1,5 +1,11 @@
 let refreshIntervalId;
 let modal;
+let modalAna;
+let anaCodeData;
+let complexityChart;
+let complexityDistributionChart;
+let traceData;
+let anaTraceData;
 
 document.addEventListener('DOMContentLoaded', function () {
     // 首次加载数据
@@ -31,6 +37,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // 关闭弹出框（点击 × 按钮）
     document.getElementById("modal-close-btn").addEventListener("click", () => {
         modal.style.display = "none";
+        document.getElementById('trace-waiting').style.display = 'block';
+        document.getElementById('trace-loading').style.display = 'none';
+        document.getElementById('trace-tabs-container').style.display = 'none';
     });
 
     modalAna = document.getElementById("modal-ana");
@@ -42,10 +51,10 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('analysis-tabs-container').style.display = 'none';
     });
 
-    // 分析代码事件
     document.getElementById('ana-code-btn').addEventListener('click', anaCode);
-
-    document.getElementById('export-json-btn').addEventListener('click', exportJsonData);
+    document.getElementById('trace-btn').addEventListener('click', anaTrace);
+    document.getElementById('export-ana-json-btn').addEventListener('click', exportJsonData);
+    document.getElementById('export-trace-json-btn').addEventListener('click', exportTraceJsonData);
 
 });
 
@@ -67,56 +76,6 @@ document.addEventListener('click', function(e) {
         document.getElementById(`${tabName}-tab`).classList.add('active');
     }
 });
-
-function loadData() {
-    fetch('/methodTraceLog/view/callServices')
-        .then(response => response.json())
-        .then(data => {
-            updateCallServices(data);
-        })
-        .catch(error => {
-            showToast('❌ 发生异常: ' + error.message);
-        })
-
-    fetch('/actuator/methodtrace')
-        .then(response => response.json())
-        .then(data => {
-            updateSummary(data);
-            updateTable(data);
-        })
-        .catch(error => {
-            showToast('❌ 发生异常: ' + error.message);
-        })
-
-    fetch('/methodTraceLog/view/list')
-        .then(response => response.json())
-        .then(data => {
-            updateMethodTable(data);
-        })
-        .catch(error => {
-            showToast('❌ 发生异常: ' + error.message);
-        })
-}
-
-function updateSummary(data) {
-    let totalCount = 0;
-    let successCount = 0;
-    let failureCount = 0;
-
-    data.forEach(item => {
-        totalCount += item.totalCalls;
-        successCount += item.successCalls;
-        failureCount += item.failedCalls;
-    });
-
-    const avgSuccessRate = totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(2) : 0;
-
-    document.getElementById('totalCount').textContent = totalCount.toLocaleString();
-    document.getElementById('successCount').textContent = successCount.toLocaleString();
-    // document.getElementById('failureCount').textContent = failureCount.toLocaleString();
-    document.getElementById('avgSuccessRate').textContent = avgSuccessRate + '%';
-}
-
 
 function updateTable(data) {
     const methodtrace = document.getElementById('methodtrace');
@@ -170,6 +129,23 @@ function updateTable(data) {
     methodtrace.innerHTML = tableHTML;
 }
 
+function openModal(id) {
+    fetch(`/methodTraceLog/view/traceid?id=${id}`)
+        .then(response => response.json())
+        .then(data => {
+            traceData = data;
+
+            const container = document.getElementById('trace-tree');
+            container.innerHTML = '';
+            createTree(data, container);
+
+            modal.style.display = 'block';
+        })
+        .catch(error => {
+            showToast('❌ 发生异常: ' + error.message);
+        })
+}
+
 function openModala(className, methodSignature) {
     modalAna.style.display = "block";
 
@@ -185,200 +161,7 @@ function openModala(className, methodSignature) {
         .catch(error => {
             showToast('❌ 发生异常: ' + error.message);
         })
-
 }
-
-function updateMethodTable(data) {
-    const method = document.getElementById('method');
-
-    if (data.length === 0) {
-        method.innerHTML = `
-                    <div class="empty-state">
-                        <p>暂无数据</p>
-                    </div>
-                `;
-        return;
-    }
-
-    let tableHTML = `
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                    <tr>
-                        <th>类名</th>
-                        <th>方法名</th>
-                        <th>开始时间</th>
-                        <th>结束时间</th>
-                        <th>耗时(ms)</th>
-                        <th>状态</th>
-                        <th>链路</th>
-                    </tr>
-                </thead>
-            <tbody>
-            `;
-
-    data.forEach(item => {
-        let traceid = item.before.traceid;
-        let className = item.before.classSimpleName;
-        let methodSignature = item.before.methodSignatureLongString.split(' ').pop().replace(item.before.className + '.', '');
-        let start = new Date(item.before.timeMillis).toLocaleString()
-        let end = item.after != null ? new Date(item.after.timeMillis).toLocaleString() : "N/A";
-        let period = item.after != null ? (item.after.timeMillis - item.before.timeMillis) : "N/A";
-        let status = item.after != null ? (item.after.logActionEnum == "AFTER_RETURN" ? "🟢成功" : "🔴失败") : "🟡调用中";
-
-        tableHTML += `
-                 <tr>
-                    <td>${className}</td>
-                    <td>${methodSignature}</td>
-                    <td>${start}</td>
-                    <td>${end}</td>
-                    <td>${period}</td>
-                    <td>${status}</td>
-                    <td><a href="javascript:void(0);" onclick="openModal('${traceid}')">查看</a></td>
-                </tr>
-                `;
-    });
-
-    tableHTML += `
-            </tbody>
-        </table>
-    </div>
-            `;
-
-    method.innerHTML = tableHTML;
-}
-
-function openModal(id) {
-    fetch(`/methodTraceLog/view/traceid?id=${id}`)
-        .then(response => response.json())
-        .then(data => {
-            const container = document.getElementById('modal-container');
-            container.innerHTML = '';
-            createTree(data, container);
-
-            modal.style.display = 'block';
-        })
-        .catch(error => {
-            showToast('❌ 发生异常: ' + error.message);
-        })
-}
-
-// 创建树形结构
-function createTree(data, container) {
-    // 创建节点容器
-    const nodeContainer = document.createElement('div');
-    nodeContainer.className = 'tree-node';
-
-    // 处理BEFORE节点
-    const beforeNode = createNodeElement(data);
-    nodeContainer.appendChild(beforeNode);
-
-    // 处理子节点
-    if (data.children && data.children.length > 0) {
-        data.children.forEach(child => {
-            createTree(child, nodeContainer);
-        });
-    }
-
-    container.appendChild(nodeContainer);
-}
-
-// 创建单个节点元素
-function createNodeElement(nodeData) {
-    const nodeElement = document.createElement('div');
-
-    // 创建节点内容
-    const content = document.createElement('div');
-    content.className = 'node-content';
-
-    // 显示简化的节点信息
-    const className = nodeData.before.className;
-    const classSimpleName = nodeData.before.classSimpleName;
-    const methodSignatureLongString = nodeData.before.methodSignatureLongString;
-    const methodSignature = methodSignatureLongString.split(' ').pop().replace(className + '.', '');
-    if (!nodeData.after) {
-        content.textContent = `🟡`;
-    } else if (nodeData.after.logActionEnum === 'AFTER_RETURN') {
-        content.textContent = `🟢`;
-    } else if (nodeData.after.logActionEnum === 'AFTER_THROWING') {
-        content.textContent = `🔴`;
-    }
-    content.textContent += `${classSimpleName}#${methodSignature}`;
-
-    // 创建节点信息面板
-    const infoPanel = document.createElement('div');
-    infoPanel.className = 'node-info';
-
-    // 添加详细信息
-    const addInfoItem = (label, value) => {
-        const item = document.createElement('div');
-        item.className = 'node-info-item';
-
-        const labelElem = document.createElement('span');
-        labelElem.className = 'node-info-label';
-        labelElem.textContent = label + ':';
-
-        const valueElem = document.createElement('span');
-        valueElem.className = 'node-info-value';
-        valueElem.textContent = value;
-
-        item.appendChild(labelElem);
-        item.appendChild(valueElem);
-        infoPanel.appendChild(item);
-    };
-
-    addInfoItem('追踪ID', nodeData.before.traceid);
-    addInfoItem('跨度ID', nodeData.before.spanid);
-    addInfoItem('父跨度ID', nodeData.before.pspanid || '无');
-    addInfoItem('类', className);
-    addInfoItem('方法', methodSignatureLongString.replace(className + '.', ''));
-    addInfoItem('参数', JSON.stringify(nodeData.before.context));
-    addInfoItem('结果', nodeData.after ? JSON.stringify(nodeData.after.context) : "");
-    addInfoItem('调用开始时间', new Date(nodeData.before.timeMillis).toLocaleString());
-    addInfoItem('调用结束时间', nodeData.after ? new Date(nodeData.after.timeMillis).toLocaleString() : "N/A");
-    addInfoItem('耗时(ms)', nodeData.after ? nodeData.after.timeMillis - nodeData.before.timeMillis : "N/A");
-
-    nodeElement.appendChild(content);
-    nodeElement.appendChild(infoPanel);
-
-    return nodeElement;
-}
-
-function updateCallServices(data) {
-    const container = document.getElementById('call-service-container');
-
-    container.innerHTML = "";
-    data.forEach(item => {
-        const serviceElement = document.createElement('button');
-        if (item.enable) {
-            serviceElement.textContent = `🟢` + "关闭" + item.desc;
-            serviceElement.addEventListener('click', () => {
-                updateCallMethods(item.name, false)
-            });
-            serviceElement.className = "btn btn-success"
-        } else {
-            serviceElement.textContent = `🔴` + "开启" + item.desc;
-            serviceElement.addEventListener('click', () => {
-                updateCallMethods(item.name, true)
-            });
-            serviceElement.className = "btn btn-toggle"
-        }
-        container.append(serviceElement);
-    })
-}
-
-function updateCallMethods(name, enable) {
-    fetch('/methodTraceLog/view/callService?name=' + name + "&enable=" + enable)
-        .then(response => response.json())
-        .then(data => {
-            updateCallServices(data)
-        })
-        .catch(error => {
-            showToast('❌ 发生异常: ' + error.message);
-        })
-}
-
-let anaData;
 
 function anaCode(){
     anaData = null;
@@ -396,10 +179,10 @@ function anaCode(){
         })
         .then(response => response.json())
         .then(data => {
-            anaData = data;
+            anaCodeData = data;
 
             document.getElementById("complexity-value").textContent = data.overallComplexity
-            updateConfidenceProgress(data.confidence)
+            updateConfidenceProgress(data.confidence,'confidence-fill','confidence-text')
             updatePerformanceRating(data.overallComplexity)
             updateComplexityChart(data.visualData.chartData)
             updateComplexityDistribution(data.visualData.complexityBreakdown)
@@ -408,7 +191,6 @@ function anaCode(){
             updateOptimizationSuggestions(data.suggestions)
 
             // 隐藏加载状态，显示分析结果
-
             document.getElementById('analysis-waiting').style.display = 'none';
             document.getElementById('analysis-loading').style.display = 'none';
             document.getElementById('analysis-tabs-container').style.display = 'block';
@@ -421,9 +203,9 @@ function anaCode(){
         })
 }
 
-function updateConfidenceProgress(percentage) {
-    const fillElement = document.getElementById('confidence-fill');
-    const textElement = document.getElementById('confidence-text');
+function updateConfidenceProgress(percentage,fill,text) {
+    const fillElement = document.getElementById(fill);
+    const textElement = document.getElementById(text);
 
     // 限制百分比在0-100之间
     const safePercentage = Math.min(100, Math.max(0, percentage));
@@ -479,8 +261,6 @@ function updatePerformanceRating(ratingText) {
             break;
     }
 }
-
-let complexityChart;
 
 function updateComplexityChart(chartData) {
     // 正确销毁已存在的图表实例
@@ -550,7 +330,6 @@ function updateComplexityChart(chartData) {
     });
 }
 
-let complexityDistributionChart;
 function updateComplexityDistribution(complexityBreakdown) {
     if (complexityDistributionChart)
         complexityDistributionChart.destroy();
@@ -692,25 +471,101 @@ function getTypeTransValue(type) {
     return classMap[type] || '';
 }
 
-/**
- * 显示Toast提示消息
- * @param {string} message - 要显示的提示消息内容
- * @returns {void}
- */
-function showToast(message) {
-    var toast = document.getElementById("toast");
-    toast.innerHTML = message;
-    toast.className = "show";
+function anaTrace(){
+    document.getElementById('trace-waiting').style.display = 'none';
+    document.getElementById('trace-loading').style.display = 'block';
+    document.getElementById('trace-tabs-container').style.display = 'none';
 
-    // 3秒后自动关闭
-    setTimeout(function(){
-        toast.className = toast.className.replace("show", "");
-    }, 3000);
+    fetch('/methodTraceLog/view/callChain',{
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(traceData),
+    })
+        .then(response => response.json())
+        .then(data => {
+            anaData = data;
+
+            document.getElementById("overallAssessment-value").textContent = data.overallAssessment
+            updateConfidenceProgress(data.confidence,'trace-confidence-fill','trace-confidence-text')
+            renderPerformanceBottlenecks(data.bottlenecks);
+            renderOptimizationSuggestions(data.suggestions)
+
+            // 隐藏加载状态，显示分析结果
+            document.getElementById('trace-waiting').style.display = 'none';
+            document.getElementById('trace-loading').style.display = 'none';
+            document.getElementById('trace-tabs-container').style.display = 'block';
+        })
+        .catch(error => {
+            showToast('❌ 发生异常: ' + error.message);
+            document.getElementById('trace-waiting').style.display = 'block';
+            document.getElementById('trace-loading').style.display = 'none';
+            document.getElementById('trace-tabs-container').style.display = 'none';
+        })
+}
+
+function renderPerformanceBottlenecks(data) {
+    const container = document.getElementById('performance-bottlenecks');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    data.forEach(item => {
+        const bottleneckDiv = document.createElement('div');
+        bottleneckDiv.className = 'trace-item';
+
+        bottleneckDiv.innerHTML = `      <div class="bottleneck-header">
+        <span class="bottleneck-class">${item.className}</span>
+        <span class="bottleneck-method">${item.methodName}</span>
+      </div>
+      <div class="bottleneck-issue">
+        <strong>问题:</strong> ${item.issue}      </div>
+      <div class="bottleneck-recommendation">
+        <strong>建议:</strong> ${item.recommendation}      </div>
+    `;
+
+        container.appendChild(bottleneckDiv);
+    });
+}
+
+function renderOptimizationSuggestions(data) {
+    const container = document.getElementById('optimization-suggestions');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    data.forEach(item => {
+        const bottleneckDiv = document.createElement('div');
+        bottleneckDiv.className = `trace-item ${getPriorityClass(item.priority)}`;
+
+        bottleneckDiv.innerHTML = `<div class="suggestion-category">${item.category}</div>
+    <div class="suggestion-description">${item.description}</div>
+    <div class="suggestion-priority"><strong>优先级:</strong>${getPriorityTransValue(item.priority)}</div>`;
+
+        container.appendChild(bottleneckDiv);
+    });
+}
+
+function getPriorityClass(priority) {
+    const classMap = {
+        'high': 'priority-high',
+        'medium': 'priority-medium',
+        'low': 'priority-low'
+    };
+    return classMap[priority] || '';
+}
+
+function getPriorityTransValue(priority) {
+    const classMap = {
+        'high': '高',
+        'medium': '中',
+        'low': '低'
+    };
+    return classMap[priority] || '';
 }
 
 function exportJsonData(){
     if(anaData!=null){
-        var jsonString = JSON.stringify(anaData);
+        var jsonString = JSON.stringify(anaCodeData);
 
         // 创建Blob对象
         const blob = new Blob([jsonString], { type: 'application/json' });
@@ -718,20 +573,30 @@ function exportJsonData(){
         // 创建下载链接
         const downloadLink = document.createElement('a');
         downloadLink.href = URL.createObjectURL(blob);
-        downloadLink.download = 'ana-data.json'; // 设置文件名
+        downloadLink.download = 'anaCodeData.json'; // 设置文件名
 
         // 触发下载
         document.body.appendChild(downloadLink);
         downloadLink.click();
         document.body.removeChild(downloadLink);
     }
-
 }
 
+function exportTraceJsonData(){
+    if(anaData!=null){
+        var jsonString = JSON.stringify(anaTraceData);
 
+        // 创建Blob对象
+        const blob = new Blob([jsonString], { type: 'application/json' });
 
+        // 创建下载链接
+        const downloadLink = document.createElement('a');
+        downloadLink.href = URL.createObjectURL(blob);
+        downloadLink.download = 'anaTraceData.json'; // 设置文件名
 
-
-
-
-
+        // 触发下载
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+    }
+}

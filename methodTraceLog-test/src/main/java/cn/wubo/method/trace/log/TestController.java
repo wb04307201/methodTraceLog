@@ -20,9 +20,12 @@ public class TestController {
 
     private final TestService testService;
 
+    private final TestComponent testComponent;
+
     @Autowired
-    public TestController(TestService testService) {
+    public TestController(TestService testService, TestComponent testComponent) {
         this.testService = testService;
+        this.testComponent = testComponent;
     }
 
 
@@ -33,7 +36,7 @@ public class TestController {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return testService.hello(name);
+        return testComponent.hello3(testService.hello(name));
     }
 
     @PostMapping("/post")

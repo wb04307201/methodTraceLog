@@ -4,7 +4,7 @@
   English | <a href="README.zh-CN.md">中文</a>
 </div>
 
-> A starter component for method tracing logs, providing method call chain tracking, performance monitoring, log file management, and (optional) AI time complexity analysis.
+> A starter component for method tracing logs, providing method call chain tracking, performance monitoring, log file management, and (optional) AI time complexity analysis、AI call chain analysis.
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
@@ -14,8 +14,6 @@
 ![MIT](https://img.shields.io/badge/License-Apache2.0-blue.svg) ![JDK](https://img.shields.io/badge/JDK-17+-green.svg) ![SpringBoot](https://img.shields.io/badge/Spring%20Boot-3+-green.svg)
 
 ---
-
-[中文文档](README.zh-CN.md)
 
 ![gif.gif](gif.gif)
 
@@ -58,7 +56,7 @@
 <dependency>
     <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.15</version>
+    <version>1.0.16</version>
 </dependency>
 ```
 
@@ -162,11 +160,13 @@ If AI analysis function is configured, you can analyze the time complexity of me
 ![img_3.png](img_3.png)
 ![img_4.png](img_4.png)
 ![img_5.png](img_5.png)
+If AI analysis functionality is configured, it is possible to analyze call chain performance and provide optimization suggestions.
+![img_6.png](img_6.png)
 
 ### Using log file management
 
 Access the log file viewer via URL: `http://localhost:8080/methodTraceLog/logFile`
-![img_6.png](img_6.png)
+![img_6.png](img_7.png)
 
 ### You can extend the [AbstractCallService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/AbstractCallService.java) interface and implement custom log data processing
 

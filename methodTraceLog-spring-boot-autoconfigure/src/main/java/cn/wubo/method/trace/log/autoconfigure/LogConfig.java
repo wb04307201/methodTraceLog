@@ -4,8 +4,10 @@ import cn.wubo.method.trace.log.CallServiceStrategy;
 import cn.wubo.method.trace.log.ICallService;
 import cn.wubo.method.trace.log.LogAspect;
 import cn.wubo.method.trace.log.MethodTraceLogProperties;
+import cn.wubo.method.trace.log.ai.CallChain;
 import cn.wubo.method.trace.log.ai.TimeComplexity;
 import cn.wubo.method.trace.log.impl.log.SimpleLogServiceImpl;
+import cn.wubo.method.trace.log.impl.monitor.MethodTraceInfo;
 import cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint;
 import cn.wubo.method.trace.log.impl.monitor.SimpleMonitorServiceImpl;
 import cn.wubo.method.trace.log.utils.DecompilerUtils;
@@ -89,12 +91,22 @@ public class LogConfig {
                 .defaultAdvisors(
                         SimpleLoggerAdvisor.builder().build() // logger advisor
                 );
-        return new TimeComplexity(builder.build(), properties.getAi());
+        return new TimeComplexity(builder.build(), properties.getTimeComplexity());
+    }
+
+    @Bean
+    @ConditionalOnBean(ChatModel.class)
+    public CallChain callChain(ChatModel chatModel, MethodTraceLogProperties properties) {
+        ChatClient.Builder builder = ChatClient.builder(chatModel)
+                .defaultAdvisors(
+                        SimpleLoggerAdvisor.builder().build() // logger advisor
+                );
+        return new CallChain(builder.build(), properties.getCallChain());
     }
 
     @Bean("wb04307201MethodTraceLogAiRouter")
     @ConditionalOnBean(ChatModel.class)
-    public RouterFunction<ServerResponse> methodTraceLogAiRouter(CallServiceStrategy callServiceStrategy, SimpleMonitorServiceImpl simpleMonitorService, TimeComplexity timeComplexity) {
+    public RouterFunction<ServerResponse> methodTraceLogAiRouter(CallServiceStrategy callServiceStrategy, SimpleMonitorServiceImpl simpleMonitorService, TimeComplexity timeComplexity, CallChain callChain) {
         RouterFunctions.Builder builder = RouterFunctions.route();
         builder.GET("/methodTraceLog/view", request -> ServerResponse.ok().contentType(MediaType.TEXT_HTML).body(new ClassPathResource(("/viewAi.html"))));
         commonRouter(builder, callServiceStrategy, simpleMonitorService);
@@ -109,6 +121,11 @@ public class LogConfig {
                     });
                     return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
                             .body(timeComplexity.analyze(map.get("sourceCode")));
+                }
+        );
+        builder.POST("/methodTraceLog/view/callChain", request -> {
+                    return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
+                            .body(callChain.analyze(request.body(String.class)));
                 }
         );
         return builder.build();

@@ -16,14 +16,10 @@ public class LogAspect {
 
     private  final CallServiceStrategy callServiceStrategy;
 
-    /**
-     * 日志跟踪id。
-     */
     public static final String LOG_TRACE_ID = "traceid";
 
-    /**
-     * 日志跨度id。
-     */
+    public static final String LOG_PSPAN_ID = "pspanid";
+
     public static final String LOG_SPAN_ID = "spanid";
 
     public LogAspect(CallServiceStrategy callServiceStrategy) {
@@ -42,21 +38,24 @@ public class LogAspect {
     @Around("(@within(org.springframework.stereotype.Component) || " +
             "@within(org.springframework.stereotype.Service) || " +
             "@within(org.springframework.web.bind.annotation.RestController)) && " +
-            "!within(cn.wubo.method.trace.log.ICallService+) &&" +
+            "!within(cn.wubo.method.trace.log.ICallService+) && " +
+            "!within(cn.wubo.method.trace.log.ai.IAnalyze+) && " +
             "!within(cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint) &&" +
-            "!within(cn.wubo.method.trace.log.file.LogFileService) &&" +
+            "!within(cn.wubo.method.trace.log.file.LogFileService) && " +
             "!within(cn.wubo.method.trace.log.file.LogFileRealTimeService)")
     public Object around(ProceedingJoinPoint jp) throws Throwable {
         Object returnValue;
         // 获取当前线程中已存在的跟踪ID
         String traceid = MDC.get(LOG_TRACE_ID);
+        String prepspanid = MDC.get(LOG_PSPAN_ID);
+        String prespanid = MDC.get(LOG_SPAN_ID);
         String pspanid = null;
 
         // 若无跟踪ID，则生成一个新的；否则获取当前跨度ID作为父跨度ID
         if (traceid == null) {
             traceid = UUID.randomUUID().toString();
         } else {
-            pspanid = MDC.get(LOG_SPAN_ID);
+            pspanid = prespanid;
         }
         // 为当前方法调用生成新的唯一跨度ID
         String spanid = UUID.randomUUID().toString();
@@ -87,9 +86,13 @@ public class LogAspect {
             callServiceStrategy.consumer(after);
             throw e;
         } finally {
-            // 清理MDC上下文，防止线程复用造成数据污染
-            MDC.remove(LOG_TRACE_ID);
-            MDC.remove(LOG_SPAN_ID);
+            if (pspanid == null){
+                MDC.remove(LOG_TRACE_ID);
+                MDC.remove(LOG_SPAN_ID);
+            }else{
+                MDC.put(LOG_PSPAN_ID, prepspanid);
+                MDC.put(LOG_SPAN_ID, prespanid);
+            }
         }
 
         return returnValue;

@@ -6,6 +6,7 @@
     <title>监控面板</title>
     <link rel="stylesheet" type="text/css" href="/static/viewAi.css"/>
     <script src="/static/chart.js/4.5.0/chart.umd.min.js"></script>
+    <script src="/static/viewCom.js"></script>
     <script src="/static/viewAi.js"></script>
 </head>
 <body>
@@ -71,14 +72,7 @@
         </div>
     </div>
 
-    <!-- 弹出框结构 -->
-    <div id="modal" class="modal">
-        <div class="modal-content">
-            <span id="modal-close-btn" class="close-btn">🗙</span>
-            <div id="modal-container" class="modal-container"></div>
-        </div>
-    </div>
-
+    <!-- 时间复杂度弹出框结构 -->
     <div id="modal-ana" class="modal">
         <div class="modal-content">
             <span id="modal-ana-close-btn" class="close-btn">🗙</span>
@@ -126,21 +120,19 @@
                                                     <div class="metric-label">分析可信度</div>
                                                     <div class="metric-progress">
                                                         <div class="progress-bar-container">
-                                                            <div class="progress-bar" id="confidence-progress">
+                                                            <div class="progress-bar">
                                                                 <div class="progress-fill" id="confidence-fill"
                                                                      style="width: 0%"></div>
                                                             </div>
                                                         </div>
                                                         <div class="progress-text" id="confidence-text">0%</div>
                                                     </div>
-
                                                 </div>
                                                 <div class="metric-item">
                                                     <div class="metric-label">性能</div>
                                                     <div class="metric-value" id="performance-rating">-</div>
                                                 </div>
                                             </div>
-
                                         </div>
                                         <div class="result-content">
                                             <h4>分析总结</h4>
@@ -239,7 +231,82 @@
                                     </div>
                                 </div>
                             </div>
-                            <button id="export-json-btn" class="btn btn-primary" style="width: 100%">导出JSON</button>
+                            <button id="export-ana-json-btn" class="btn btn-primary" style="width: 100%">导出JSON
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 链路弹出框结构 -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span id="modal-close-btn" class="close-btn">🗙</span>
+            <div id="modal-trace-container" class="modal-container">
+                <div class="ana-container">
+                    <div class="ana-container-item">
+                        <label for="trace-tree" class="ana-label">链路信息</label>
+                        <div id="trace-tree" class="ana-textarea"></div>
+                        <button id="trace-btn" class="btn btn-primary" style="width: 100%">分析链路</button>
+                    </div>
+                    <div class="ana-container-item">
+                        <div id="trace-waiting" class="loading" style="display: block;">
+                            <div class="analysis-placeholder">
+                                <div class="placeholder-icon">💡</div>
+                                <p class="placeholder-text">请点击"分析链路"按钮开始分析</p>
+                                <div class="placeholder-hint">AI将为您提供调用链路性能分析和优化建议</div>
+                            </div>
+                        </div>
+                        <div id="trace-loading" class="loading" style="display: none;">
+                            <div class="analysis-placeholder">
+                                <div class="spinner"></div>
+                                <p class="placeholder-text">正在分析链路，请稍候...</p>
+                                <div class="placeholder-hint">• 提供详细的调用链路性能分析和优化建议</div>
+                                <div class="placeholder-hint">• 可视化展示链路性能特征</div>
+                            </div>
+                        </div>
+                        <div id="trace-tabs-container" class="tabs-container" style="display: none">
+                            <div class="tabs-content" style="height: calc(100% - 36px);">
+                                <div class="tab-content active">
+                                    <div class="analysis-result">
+                                        <div class="result-content">
+                                            <h4>概况</h4>
+                                            <p id="overallAssessment-value">-</p>
+                                        </div>
+                                    </div>
+                                    <div class="analysis-result">
+                                        <div class="result-content">
+                                            <h4>分析可信度</h4>
+                                            <div class="metric-progress">
+                                                <div class="progress-bar-container">
+                                                    <div class="progress-bar">
+                                                        <div class="progress-fill" id="trace-confidence-fill"
+                                                             style="width: 0%"></div>
+                                                    </div>
+                                                </div>
+                                                <div class="progress-text" id="trace-confidence-text">0%</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="analysis-result">
+                                        <div class="result-content">
+                                            <h4>性能瓶颈</h4>
+                                            <div id="performance-bottlenecks"></div>
+                                        </div>
+                                    </div>
+                                    <div class="analysis-result">
+                                        <div class="result-content">
+                                            <h4>优化建议</h4>
+                                            <div id="optimization-suggestions"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button id="export-trace-json-btn" class="btn btn-primary" style="width: 100%">
+                                    导出JSON
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
