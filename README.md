@@ -4,7 +4,7 @@
   English | <a href="README.zh-CN.md">中文</a>
 </div>
 
-> A starter component for method tracing logs, providing method call chain tracking, performance monitoring, log file management, and (optional) AI time complexity analysis.
+> A starter component for method tracing logs, providing method call chain tracking, performance monitoring, log file management, and (optional) AI time complexity analysis、AI call chain analysis.
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
