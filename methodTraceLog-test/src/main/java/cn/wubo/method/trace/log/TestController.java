@@ -36,7 +36,9 @@ public class TestController {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return testComponent.hello3(testService.hello(name));
+        int a = 1;
+        testService.add(a,2);
+        return testComponent.hello3(testService.hello(name)) + a;
     }
 
     @PostMapping("/post")
