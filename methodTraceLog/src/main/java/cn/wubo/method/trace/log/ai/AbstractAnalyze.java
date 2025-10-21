@@ -5,12 +5,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-public abstract class AbstractAnalyze<T> implements IAnalyze<T> {
+public abstract class AbstractAnalyze implements IAnalyze {
 
     protected static ObjectMapper mapper = new ObjectMapper().enable(JsonParser.Feature.ALLOW_COMMENTS);
 
     @Override
-    public JsonNode analyze(T data) throws JsonProcessingException {
+    public JsonNode analyze(String data) throws JsonProcessingException {
         String content = call(data);
         return trans(content);
     }
