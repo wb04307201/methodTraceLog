@@ -1,11 +1,9 @@
 package cn.wubo.method.trace.log.ai;
 
 import cn.wubo.method.trace.log.MethodTraceLogProperties;
-import cn.wubo.method.trace.log.impl.monitor.MethodTraceInfo;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import org.springframework.ai.chat.client.ChatClient;
 
-public class CallChain extends AbstractAnalyze<String> {
+public class CallChain extends AbstractAnalyze {
 
     private final ChatClient client;
 

@@ -3,20 +3,21 @@ package cn.wubo.method.trace.log.utils;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @UtilityClass
 @Slf4j
 public class DecompilerUtils {
 
-    public String decompile(String className, String methodName) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, ClassNotFoundException, UnsupportedEncodingException {
+    public String decompile(String className, String methodName) throws InvocationTargetException, IllegalAccessException, NoSuchMethodException, ClassNotFoundException, IOException {
         // 获取类的 .class 文件路径
         Class<?> clazz = Class.forName(className);
         String classResource = clazz.getName().replace('.', '/') + ".class";
@@ -25,16 +26,31 @@ public class DecompilerUtils {
             throw new IllegalArgumentException("Class file not found: " + clazz.getName());
         }
 
+        String[] args;
         String classPath = classUrl.getPath();
-        // 如果是 JAR 中的类，需要特殊处理（CFR 支持 jar:file://...）
-        // 但为简化，假设是文件系统中的 class
+        if ("jar".equals(classUrl.getProtocol())) {
+            int jarEndIndex = classPath.indexOf(".jar/!");
+            String jarFilePath = classPath.substring(0, jarEndIndex + 4).replace("nested:/", "");
+            String innerClassPath = classPath.substring(jarEndIndex + 6).replace("/!/", "/");
 
-        // 构造 CFR 参数
-        String[] args = {
-                classPath,
-                "--methodname", methodName,
-                "--silent", "true"
-        };
+            Path tempDir = Files.createTempDirectory("decompiled");
+
+            unzipJar(jarFilePath, tempDir.toFile());
+
+            String classAbsolutePath = Paths.get(tempDir.toString(), innerClassPath).toString();
+            args = new String[]{
+                    classAbsolutePath,
+                    "--methodname", methodName,
+                    "--silent", "true"
+            };
+        } else {
+            args = new String[]{
+                    classPath,
+                    "--methodname", methodName,
+                    "--silent", "true"
+            };
+
+        }
 
         // 捕获 System.out 输出
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -53,6 +69,48 @@ public class DecompilerUtils {
 
         return baos.toString("UTF-8");
     }
+
+    /**
+     * 解压 JAR 文件到指定目录
+     *
+     * @param jarFilePath   JAR 文件路径
+     * @param destDirectory 目标解压目录
+     * @throws IOException IO 异常
+     */
+    public static void unzipJar(String jarFilePath, File destDirectory) throws IOException {
+        if (!destDirectory.exists()) {
+            destDirectory.mkdirs();
+        }
+
+        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(jarFilePath))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                File entryFile = new File(destDirectory, entry.getName());
+
+                // 防止路径遍历漏洞
+                if (!entryFile.toPath().normalize().startsWith(destDirectory.toPath().normalize())) {
+                    throw new IOException("Bad zip entry: " + entry.getName());
+                }
+
+                if (entry.isDirectory()) {
+                    entryFile.mkdirs();
+                } else {
+                    // 确保父目录存在
+                    entryFile.getParentFile().mkdirs();
+
+                    try (FileOutputStream fos = new FileOutputStream(entryFile)) {
+                        byte[] buffer = new byte[1024];
+                        int len;
+                        while ((len = zis.read(buffer)) > 0) {
+                            fos.write(buffer, 0, len);
+                        }
+                    }
+                }
+                zis.closeEntry();
+            }
+        }
+    }
+
 
     public String removeAnnotations(String code) {
         // 正则表达式：匹配以 @ 开头的注解（可能跨多行）
