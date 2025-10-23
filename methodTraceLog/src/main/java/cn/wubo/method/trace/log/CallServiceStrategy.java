@@ -22,7 +22,7 @@ public class CallServiceStrategy {
 
     public void consumer(ServiceCallInfo serviceCallInfo) {
         for (ICallService callService : callServices) {
-            if (callService.getEnable()) {
+            if (Boolean.TRUE.equals(callService.getEnable())) {
                 callService.consumer(serviceCallInfo);
             }
         }
