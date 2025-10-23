@@ -28,13 +28,10 @@ public class DecompilerUtils {
 
         String[] args;
         String classPath = classUrl.getPath();
-        log.info("Class file path: {}", classPath);
         if ("jar".equals(classUrl.getProtocol())) {
             int jarEndIndex = classPath.indexOf(".jar/!");
             String jarFilePath = classPath.substring(0, jarEndIndex + 4).replace("nested:/", "");
-            log.info("Jar file path: {}", jarFilePath);
-            String innerClassPath = classPath.substring(jarEndIndex + 6).replace("/!/", "/"); // 去掉 "!/" 前缀
-            log.info("Inner class path: {}", innerClassPath);
+            String innerClassPath = classPath.substring(jarEndIndex + 6).replace("/!/", "/");
 
             Path tempDir = Files.createTempDirectory("decompiled");
 
