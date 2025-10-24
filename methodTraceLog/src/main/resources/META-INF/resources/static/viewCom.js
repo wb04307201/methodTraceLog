@@ -148,7 +148,7 @@ function createNodeElement(nodeData) {
         content.textContent = `🟡`;
     } else if (nodeData.after.logActionEnum === 'AFTER_RETURN') {
         content.textContent = `🟢`;
-    } else if (nodeData.after.logActionEnum === 'AFTER_THROWING') {
+    } else if (nodeData.after.logActionEnum === 'AFTER_THROW') {
         content.textContent = `🔴`;
     }
     content.textContent += `${classSimpleName}#${methodSignature}`;

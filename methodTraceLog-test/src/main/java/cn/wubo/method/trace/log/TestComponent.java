@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 import static java.lang.Thread.sleep;
 
@@ -11,6 +12,12 @@ import static java.lang.Thread.sleep;
 public class TestComponent {
 
     public String hello(String name) {
+        Random random = new Random();
+        int value = random.nextInt(2) + 1;
+        if (value == 1) {
+            throw new RuntimeException("测试异常");
+        }
+
         try {
             sleep(3000);
         } catch (InterruptedException e) {
@@ -25,7 +32,7 @@ public class TestComponent {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return text+"😀";
+        return text + "😀";
     }
 
     public String hello2(String text) {
@@ -34,7 +41,7 @@ public class TestComponent {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return text+"🤣";
+        return text + "🤣";
     }
 
     public String hello3(String text) {
@@ -43,7 +50,7 @@ public class TestComponent {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return text+"🥲";
+        return text + "🥲";
     }
 
 }
