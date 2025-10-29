@@ -175,13 +175,19 @@ function createNodeElement(nodeData) {
         infoPanel.appendChild(item);
     };
 
+    let  result = "";
+    if(nodeData.after){
+        result = JSON.stringify(nodeData.after.context)
+        if (result.length > 150) result = result.substring(0, 150) + '...';
+    }
+
     addInfoItem('追踪ID', nodeData.before.traceid);
     addInfoItem('跨度ID', nodeData.before.spanid);
     addInfoItem('父跨度ID', nodeData.before.pspanid || '无');
     addInfoItem('类', className);
     addInfoItem('方法', methodSignatureLongString.replace(className + '.', ''));
     addInfoItem('参数', JSON.stringify(nodeData.before.context));
-    addInfoItem('结果', nodeData.after ? JSON.stringify(nodeData.after.context) : "");
+    addInfoItem('结果', result);
     addInfoItem('调用开始时间', new Date(nodeData.before.timeMillis).toLocaleString());
     addInfoItem('调用结束时间', nodeData.after ? new Date(nodeData.after.timeMillis).toLocaleString() : "N/A");
     addInfoItem('耗时(ms)', nodeData.after ? nodeData.after.timeMillis - nodeData.before.timeMillis : "N/A");
