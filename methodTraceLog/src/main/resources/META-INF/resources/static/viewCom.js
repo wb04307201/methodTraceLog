@@ -1,4 +1,12 @@
-
+const timeOptions = {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 3 // 关键：显示3位毫秒
+}
 
 function loadData() {
     fetch('/methodTraceLog/view/callServices')
@@ -29,7 +37,6 @@ function loadData() {
             showToast('❌ 发生异常: ' + error.message);
         })
 }
-
 
 
 function updateSummary(data) {
@@ -84,8 +91,8 @@ function updateMethodTable(data) {
         let traceid = item.before.traceid;
         let className = item.before.classSimpleName;
         let methodSignature = item.before.methodSignatureLongString.split(' ').pop().replace(item.before.className + '.', '');
-        let start = new Date(item.before.timeMillis).toLocaleString()
-        let end = item.after != null ? new Date(item.after.timeMillis).toLocaleString() : "N/A";
+        let start = new Date(item.before.timeMillis).toLocaleString('zh-CN', timeOptions)
+        let end = item.after != null ? new Date(item.after.timeMillis).toLocaleString('zh-CN', timeOptions) : "N/A";
         let period = item.after != null ? (item.after.timeMillis - item.before.timeMillis) : "N/A";
         let status = item.after != null ? (item.after.logActionEnum == "AFTER_RETURN" ? "🟢成功" : "🔴失败") : "🟡调用中";
 
@@ -175,8 +182,8 @@ function createNodeElement(nodeData) {
         infoPanel.appendChild(item);
     };
 
-    let  result = "";
-    if(nodeData.after){
+    let result = "";
+    if (nodeData.after) {
         result = JSON.stringify(nodeData.after.context)
         if (result.length > 150) result = result.substring(0, 150) + '...';
     }
@@ -188,8 +195,8 @@ function createNodeElement(nodeData) {
     addInfoItem('方法', methodSignatureLongString.replace(className + '.', ''));
     addInfoItem('参数', JSON.stringify(nodeData.before.context));
     addInfoItem('结果', result);
-    addInfoItem('调用开始时间', new Date(nodeData.before.timeMillis).toLocaleString());
-    addInfoItem('调用结束时间', nodeData.after ? new Date(nodeData.after.timeMillis).toLocaleString() : "N/A");
+    addInfoItem('调用开始时间', new Date(nodeData.before.timeMillis).toLocaleString('zh-CN', timeOptions));
+    addInfoItem('调用结束时间', nodeData.after ? new Date(nodeData.after.timeMillis).toLocaleString('zh-CN', timeOptions) : "N/A");
     addInfoItem('耗时(ms)', nodeData.after ? nodeData.after.timeMillis - nodeData.before.timeMillis : "N/A");
 
     nodeElement.appendChild(content);
@@ -243,7 +250,7 @@ function showToast(message) {
     toast.className = "show";
 
     // 3秒后自动关闭
-    setTimeout(function(){
+    setTimeout(function () {
         toast.className = toast.className.replace("show", "");
     }, 3000);
 }
