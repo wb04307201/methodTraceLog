@@ -6,7 +6,7 @@ import org.aspectj.lang.reflect.MethodSignature;
 
 @Data
 @AllArgsConstructor
-public class ServiceCallInfo implements Cloneable {
+public class ServiceCallInfo {
     private String traceid;
     private String pspanid;
     private String spanid;
@@ -35,12 +35,19 @@ public class ServiceCallInfo implements Cloneable {
         this.methodSignatureLongString = methodSignature.toLongString();
     }
 
-    public ServiceCallInfo clone() {
-        try {
-            return (ServiceCallInfo) super.clone();
-        } catch (CloneNotSupportedException e) {
-            throw new AssertionError();
-        }
+    public static ServiceCallInfo copyOf(ServiceCallInfo original) {
+        return new ServiceCallInfo(
+                original.getTraceid(),
+                original.getPspanid(),
+                original.getSpanid(),
+                original.getClassName(),
+                original.getClassSimpleName(),
+                original.getMethodName(),
+                original.getMethodSignatureShortString(),
+                original.getMethodSignatureLongString(),
+                original.getContext(),
+                original.getLogActionEnum(),
+                original.getTimeMillis());
     }
 
 }

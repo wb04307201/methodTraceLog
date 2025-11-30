@@ -7,7 +7,6 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.MDC;
 
-import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -65,7 +64,7 @@ public class LogAspect {
 
         // 构建方法调用前的服务调用信息
         ServiceCallInfo before = new ServiceCallInfo(traceid, pspanid, spanid, (MethodSignature) jp.getSignature(), jp.getArgs(), LogActionEnum.BEFORE, System.currentTimeMillis());
-        ServiceCallInfo after = before.clone();
+        ServiceCallInfo after = ServiceCallInfo.copyOf(before);
 
         try {
             // 执行前置处理逻辑

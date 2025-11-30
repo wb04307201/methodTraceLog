@@ -31,7 +31,7 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
 
     private Map<String, MethodTraceInfo> methodTraceInfoMap = new ConcurrentHashMap<>();
 
-    private static final long MAX_LOG_AGE_MILLIS = 8 * 60 * 60 * 1000; // 8小时
+    private static final long MAX_LOG_AGE_MILLIS = 8 * 60 * 60 * 1000L; // 8小时
 
     @Override
     public void consumer(ServiceCallInfo serviceCallInfo) {
