@@ -23,9 +23,7 @@ spring:
     ollama:
       chat:
         options:
-#          model: gemma3
-          model: qwen3
-#          model: deepseek-r1
+          model: qwen3-coder
       base-url: http://localhost:11434
 
 

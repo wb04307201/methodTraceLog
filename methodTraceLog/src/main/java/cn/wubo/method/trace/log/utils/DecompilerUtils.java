@@ -7,6 +7,7 @@ import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -67,7 +68,7 @@ public class DecompilerUtils {
             System.setOut(oldOut);
         }
 
-        return baos.toString("UTF-8");
+        return baos.toString(StandardCharsets.UTF_8);
     }
 
     /**

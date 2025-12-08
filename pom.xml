@@ -34,10 +34,9 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-boot.version>3.5.6</spring-boot.version>
-        <spring-ai.version>1.0.1</spring-ai.version>
-        <lombok.version>1.18.38</lombok.version>
-        <logback.version>1.5.18</logback.version>
+        <spring-boot.version>3.5.8</spring-boot.version>
+        <spring-ai.version>1.1.1</spring-ai.version>
+        <lombok.version>1.18.42</lombok.version>
         <javassist.version>3.30.2-GA</javassist.version>
         <cfr.version>0.152</cfr.version>
     </properties>
@@ -62,11 +61,6 @@
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok</artifactId>
                 <version>${lombok.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>ch.qos.logback</groupId>
-                <artifactId>logback-classic</artifactId>
-                <version>${logback.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.javassist</groupId>

@@ -26,7 +26,6 @@ import static cn.wubo.method.trace.log.file.Constants.MESSAGE;
 public class LogFileRealTimeService implements InitializingBean, DisposableBean {
 
     private final MethodTraceLogProperties.FileProperties properties;
-    private final Pattern logPattern;
 
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -47,7 +46,6 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
 
     public LogFileRealTimeService(MethodTraceLogProperties.FileProperties properties, SimpMessagingTemplate messagingTemplate) {
         this.properties = properties;
-        this.logPattern = Pattern.compile(properties.getLogPattern());
         this.messagingTemplate = messagingTemplate;
     }
 
@@ -192,8 +190,8 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
 
             // 计算需要读取的长度，限制单次读取大小为1MB
             long length = endPosition - startPosition;
-            if (length > 1024 * 1024) { // 限制单次读取大小为1MB
-                length = 1024 * 1024;
+            if (length > 1024 * 1024L) { // 限制单次读取大小为1MB
+                length = 1024 * 1024L;
             }
 
             byte[] buffer = new byte[(int) length];
@@ -217,9 +215,6 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
      */
     private void sendLogLine(String fileName, String logLine) {
         try {
-            // 解析日志行
-            LogLineInfo lineInfo = LogLineInfo.parse(logLine,logPattern);
-
             // 构建消息
             Map<String, Object> message = Map.of("type", "new_log_line", "fileName", fileName, "content", logLine);
 

@@ -7,7 +7,6 @@ import cn.wubo.method.trace.log.MethodTraceLogProperties;
 import cn.wubo.method.trace.log.ai.CallChain;
 import cn.wubo.method.trace.log.ai.TimeComplexity;
 import cn.wubo.method.trace.log.impl.log.SimpleLogServiceImpl;
-import cn.wubo.method.trace.log.impl.monitor.MethodTraceInfo;
 import cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint;
 import cn.wubo.method.trace.log.impl.monitor.SimpleMonitorServiceImpl;
 import cn.wubo.method.trace.log.utils.DecompilerUtils;
@@ -123,10 +122,8 @@ public class LogConfig {
                             .body(timeComplexity.analyze(map.get("sourceCode")));
                 }
         );
-        builder.POST("/methodTraceLog/view/callChain", request -> {
-                    return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
-                            .body(callChain.analyze(request.body(String.class)));
-                }
+        builder.POST("/methodTraceLog/view/callChain", request -> ServerResponse.ok().contentType(MediaType.APPLICATION_JSON)
+                .body(callChain.analyze(request.body(String.class)))
         );
         return builder.build();
     }

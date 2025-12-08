@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static java.lang.Thread.sleep;
@@ -38,6 +37,8 @@ public class TestController {
         }
         int a = 1;
         testService.add(a,2);
+        testService.twoSum(new int[]{2,7,11,15}, 9);
+        testService.lengthOfLongestSubstring("abcabcbb");
         return testComponent.hello3(testService.hello(name)) + a;
     }
 

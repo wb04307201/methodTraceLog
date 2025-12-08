@@ -140,7 +140,8 @@ public class LogFileService {
         if (!logFile.isFile()) {
             throw new IllegalArgumentException("Not a valid file");
         }
-        if (!isValidFileExtensions(logFile)) {
+        boolean isValidFileExtensions = isValidFileExtensions(logFile);
+        if (!isValidFileExtensions) {
             throw new IllegalArgumentException("Unsupported file type");
         }
 
