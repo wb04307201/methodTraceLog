@@ -239,9 +239,15 @@
     };
 
     // ============== 登出按钮(供 panel.js 调用) ==============
+    // 同一时刻只有一个 button 实例,重复调用 mtlRenderLogout 只显示已存在的实例
+    let logoutBtnEl = null;
     window.mtlRenderLogout = function (containerId) {
         const c = document.getElementById(containerId);
         if (!c) return;
+        if (logoutBtnEl) {
+            logoutBtnEl.hidden = false;
+            return;
+        }
         const btn = document.createElement('button');
         btn.className = 'mtl-logout-btn';
         btn.textContent = '🚪 注销';
@@ -252,5 +258,9 @@
             }
         });
         c.appendChild(btn);
+        logoutBtnEl = btn;
+    };
+    window.mtlHideLogout = function () {
+        if (logoutBtnEl) logoutBtnEl.hidden = true;
     };
 })();

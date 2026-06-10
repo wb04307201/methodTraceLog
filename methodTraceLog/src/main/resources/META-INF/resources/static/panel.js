@@ -103,32 +103,36 @@
         }
     }
 
-    // 横幅登录成功后的回调：隐藏横幅 + 拉数据
+    // 横幅登录成功后的回调：隐藏横幅 + 显示登出按钮 + 拉数据
     function onBannerSuccess() {
         if (window.mtlUnmountAuthBanner) {
             window.mtlUnmountAuthBanner('mtlAuthSlot');
         }
+        if (window.mtlRenderLogout) {
+            window.mtlRenderLogout('mtlLogoutSlot');
+        }
         loadCurrentTabData();
     }
 
-    // 注销后重新挂横幅(由 mtlAuth.js 派发的 mtlAuthLoggedOut 事件触发)
+    // 注销后：隐藏登出按钮 + 重新挂横幅(由 mtlAuth.js 派发的 mtlAuthLoggedOut 事件触发)
     function onLoggedOut() {
+        if (window.mtlHideLogout) {
+            window.mtlHideLogout();
+        }
         if (window.mtlMountAuthBanner) {
             window.mtlMountAuthBanner('mtlAuthSlot', onBannerSuccess);
         }
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        if (window.mtlRenderLogout) mtlRenderLogout('mtlLogoutSlot');
-
-        // 注销事件：重新挂横幅
+        // 注销事件：隐藏登出按钮 + 重新挂横幅
         window.addEventListener('mtlAuthLoggedOut', onLoggedOut);
 
         // 1) 立即渲染 tab 骨架(不调 onShow,等鉴权决定)
         showTab('overview', { skipOnShow: true });
         window.addEventListener('hashchange', onHashChange);
 
-        // 2) 检查登录态,决定挂横幅 / 拉数据
+        // 2) 检查登录态,决定挂横幅 / 拉数据 / 显示登出按钮
         if (window.mtlCheckAuth) {
             window.mtlCheckAuth().then(state => {
                 if (state.authEnabled && !state.sessionValid) {
@@ -136,6 +140,9 @@
                         window.mtlMountAuthBanner('mtlAuthSlot', onBannerSuccess);
                     }
                 } else {
+                    if (state.sessionValid && window.mtlRenderLogout) {
+                        window.mtlRenderLogout('mtlLogoutSlot');
+                    }
                     loadCurrentTabData();
                 }
             });
