@@ -23,40 +23,12 @@
     const styleInjected = { value: false };
 
     // ============== 样式注入 ==============
+    // 这些样式只在 mtlAuth.js 单独加载(没有 panel.css)时才会用到;
+    // 正常情况下 panel.css 已定义更完整版本,这里只是降级兜底
     const css = `
-.mtl-auth-bar {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 24px;
-    background: linear-gradient(90deg, #fff7e6 0%, #ffe7ba 100%);
-    border-bottom: 1px solid #ffd591;
-    color: #874d00; font-size: 14px;
-    transition: transform 0.2s ease, opacity 0.2s ease;
-}
-.mtl-auth-bar.is-hiding { transform: translateY(-100%); opacity: 0; }
-.mtl-auth-bar__icon { font-size: 18px; }
-.mtl-auth-bar__input {
-    flex: 1; max-width: 360px;
-    padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 6px;
-    font-size: 14px; outline: none;
-    transition: border-color 0.15s, background 0.15s;
-}
-.mtl-auth-bar__input:focus { border-color: #fa8c16; }
-.mtl-auth-bar__input.is-error { border-color: #ff4d4f; background: #fff1f0; }
-.mtl-auth-bar__btn {
-    padding: 6px 16px; border: none; border-radius: 6px;
-    background: #fa8c16; color: white; font-size: 14px; cursor: pointer;
-    transition: transform 0.15s, box-shadow 0.15s;
-}
-.mtl-auth-bar__btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(250,140,22,0.4); }
-.mtl-auth-bar__btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.mtl-auth-bar__err { color: #ff4d4f; font-size: 13px; margin-left: 4px; }
-.mtl-logout-btn {
-    background: rgba(255, 255, 255, 0.85); color: #555;
-    border: 1px solid rgba(102, 126, 234, 0.3);
-    padding: 6px 14px; border-radius: 8px;
-    cursor: pointer; font-size: 13px;
-}
-.mtl-logout-btn:hover { background: white; }
+.mtl-auth-bar { display: flex; align-items: center; gap: 12px; padding: 10px 24px; font-size: 14px; }
+.mtl-auth-bar.is-hiding { transform: translateY(-100%); opacity: 0; transition: transform 0.2s, opacity 0.2s; }
+.mtl-auth-bar__err { font-size: 12px; margin-left: 4px; }
 `;
     function ensureStyle() {
         if (styleInjected.value) return;
@@ -82,7 +54,7 @@
     function renderBanner(container) {
         container.innerHTML = `
             <div class="mtl-auth-bar" role="alert">
-                <span class="mtl-auth-bar__icon">🔑</span>
+                <span class="mtl-auth-bar__icon" data-icon="key"></span>
                 <label for="mtlAuthKey">请输入 API Key</label>
                 <input id="mtlAuthKey" class="mtl-auth-bar__input" type="password"
                        placeholder="X-Api-Key" autocomplete="off" maxlength="512" />
@@ -90,6 +62,8 @@
                 <span id="mtlAuthErr" class="mtl-auth-bar__err" hidden></span>
             </div>
         `;
+        // 展开 [data-icon] 占位符
+        if (window.mtlMountIcons) window.mtlMountIcons(container);
         const $key = container.querySelector('#mtlAuthKey');
         const $btn = container.querySelector('#mtlAuthSubmit');
         const $err = container.querySelector('#mtlAuthErr');
@@ -125,11 +99,11 @@
                         try { activeSlot.onSuccess(); } catch (e) { console.error('onSuccess error', e); }
                     }
                 } else {
-                    showErr('❌ API Key 无效或鉴权未启用');
+                    showErr('API Key 无效或鉴权未启用');
                     $key.select();
                 }
             } catch (e) {
-                showErr('❌ 网络异常：' + e.message);
+                showErr('网络异常：' + e.message);
             } finally {
                 $btn.disabled = false;
                 $btn.textContent = '登录';
@@ -250,7 +224,11 @@
         }
         const btn = document.createElement('button');
         btn.className = 'mtl-logout-btn';
-        btn.textContent = '🚪 注销';
+        if (window.mtlIcon) {
+            btn.innerHTML = window.mtlIcon('log-out') + '<span class="mtl-icon-text">注销</span>';
+        } else {
+            btn.textContent = '注销';
+        }
         btn.title = '清除当前 session，下次访问会要求重新输入 API Key';
         btn.addEventListener('click', () => {
             if (confirm('确定要注销当前会话？注销后需要重新输入 API Key。')) {

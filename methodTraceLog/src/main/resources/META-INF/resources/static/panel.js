@@ -124,7 +124,69 @@
         }
     }
 
+    // ============== 主题切换 ==============
+    // 优先级:localStorage > 跟随系统。点 toggle 后写 localStorage,不再跟系统。
+    const THEME_KEY = 'mtl-theme';
+    function getStoredTheme() {
+        try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; }
+    }
+    function storeTheme(theme) {
+        try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* ignore */ }
+    }
+    function resolveInitialTheme() {
+        const stored = getStoredTheme();
+        if (stored === 'light' || stored === 'dark') return stored;
+        return 'auto'; // 不显式设 data-theme,由 CSS 的 prefers-color-scheme 接管
+    }
+    function applyTheme(theme) {
+        // theme = 'light' | 'dark' | 'auto'
+        const root = document.documentElement;
+        if (theme === 'auto') {
+            root.removeAttribute('data-theme');
+        } else {
+            root.setAttribute('data-theme', theme);
+        }
+        // 同步 toggle 按钮图标:dark 时显示太阳(暗示"点我变亮"),light 时显示月亮
+        const btn = document.getElementById('mtlThemeToggle');
+        if (btn) {
+            const effective = (theme === 'auto')
+                ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                : theme;
+            btn.innerHTML = window.mtlIcon ? window.mtlIcon(effective === 'dark' ? 'sun' : 'moon') : '';
+        }
+    }
+    function initTheme() {
+        applyTheme(resolveInitialTheme());
+        const btn = document.getElementById('mtlThemeToggle');
+        if (btn) {
+            btn.addEventListener('click', function () {
+                const current = resolveInitialTheme();
+                const root = document.documentElement;
+                const effectiveDark = (root.getAttribute('data-theme') === 'dark')
+                    || (current === 'auto' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                const next = effectiveDark ? 'light' : 'dark';
+                storeTheme(next);
+                applyTheme(next);
+            });
+        }
+        // 跟系统:用户没显式选过时,系统主题变化实时生效
+        if (window.matchMedia) {
+            const mq = window.matchMedia('(prefers-color-scheme: dark)');
+            const onSystemChange = function () {
+                if (getStoredTheme() === null) applyTheme('auto');
+            };
+            if (mq.addEventListener) mq.addEventListener('change', onSystemChange);
+            else if (mq.addListener) mq.addListener(onSystemChange);
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
+        // 主题:尽早设,避免初始 flash
+        initTheme();
+
+        // 展开所有 [data-icon] 占位符为 SVG
+        if (window.mtlMountIcons) window.mtlMountIcons();
+
         // 注销事件：隐藏登出按钮 + 重新挂横幅
         window.addEventListener('mtlAuthLoggedOut', onLoggedOut);
 

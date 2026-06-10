@@ -7,6 +7,7 @@
     <link rel="stylesheet" type="text/css" href="/static/panel.css"/>
     <script src="/static/sockjs-client/1.6.1/sockjs.min.js"></script>
     <script src="/static/stompjs/7.1.1/stomp.umd.min.js"></script>
+    <script src="/static/mtlIcons.js"></script>
     <script src="/static/mtlAuth.js"></script>
     <script src="/static/panel.js"></script>
     <script src="/static/overview.js"></script>
@@ -17,7 +18,7 @@
 <body>
     <header class="mtl-topbar">
         <div class="mtl-topbar-left">
-            <span class="mtl-title">📊 方法观测日志</span>
+            <span class="mtl-title"><span data-icon="chart-bar"></span><span>方法观测日志</span></span>
         </div>
         <nav class="mtl-tabs" id="mtlTabs">
             <a class="mtl-tab" href="#overview" data-tab="overview">概览</a>
@@ -25,7 +26,10 @@
             <a class="mtl-tab" href="#logs"     data-tab="logs">日志文件</a>
             <a class="mtl-tab" href="#decompile" data-tab="decompile">反编译</a>
         </nav>
-        <div class="mtl-topbar-right" id="mtlLogoutSlot"></div>
+        <div class="mtl-topbar-right">
+            <button id="mtlThemeToggle" class="mtl-theme-toggle" type="button" title="切换主题" aria-label="切换主题" data-icon="moon"></button>
+            <span id="mtlLogoutSlot"></span>
+        </div>
     </header>
 
     <div id="mtlAuthSlot"></div>
@@ -111,8 +115,8 @@
                 <button id="traceSearchBtn" class="btn btn-primary">查询</button>
                 <button id="traceResetBtn" class="btn">重置</button>
                 <div class="form-group-inline" style="margin-left:auto;">
-                    <button id="traceExportJson" class="btn btn-success">⬇ 导出 JSON</button>
-                    <button id="traceExportCsv"  class="btn btn-success">⬇ 导出 CSV</button>
+                    <button id="traceExportJson" class="btn btn-success"><span data-icon="arrow-down"></span><span class="mtl-icon-text">导出 JSON</span></button>
+                    <button id="traceExportCsv"  class="btn btn-success"><span data-icon="arrow-down"></span><span class="mtl-icon-text">导出 CSV</span></button>
                 </div>
             </div>
 
@@ -127,14 +131,14 @@
         <!-- ===== 日志文件 tab ===== -->
         <section class="mtl-tab-panel" data-tab="logs" hidden>
             <div class="area-panel fade-in">
-                <h3>📁 选择日志文件</h3>
+                <h3><span data-icon="folder"></span><span>选择日志文件</span></h3>
                 <div id="fileList" class="file-list">
                     <div class="loading">正在加载文件列表...</div>
                 </div>
             </div>
 
             <div class="area-panel hidden fade-in" id="searchPanel">
-                <h3>🔍 搜索条件</h3>
+                <h3><span data-icon="search"></span><span>搜索条件</span></h3>
                 <div class="form-row">
                     <div class="form-group">
                         <label for="keyword">关键字</label>
@@ -178,16 +182,16 @@
                     </div>
                 </div>
                 <div class="form-row">
-                    <button class="btn btn-primary" onclick="logsSearchLogs()">🔍 搜索日志</button>
-                    <button class="btn"            onclick="logsResetLogs()">🔄 重置搜索</button>
-                    <button class="btn btn-success" onclick="logsDownloadLog()">📥 下载日志</button>
+                    <button class="btn btn-primary" onclick="logsSearchLogs()"><span data-icon="search"></span><span class="mtl-icon-text">搜索日志</span></button>
+                    <button class="btn"            onclick="logsResetLogs()"><span data-icon="refresh-cw"></span><span class="mtl-icon-text">重置搜索</span></button>
+                    <button class="btn btn-success" onclick="logsDownloadLog()"><span data-icon="download"></span><span class="mtl-icon-text">下载日志</span></button>
                     <div class="realtime-controls">
                         <div class="connection-status">
                             <span class="status-indicator disconnected" id="connectionStatus"></span>
                             <span id="connectionText">未连接</span>
                         </div>
-                        <button class="btn btn-toggle" id="realtimeToggleBtn" onclick="logsToggleRealtimeMonitor()">📡 实时监控</button>
-                        <button class="btn" disabled id="clearRealtimeBtn" onclick="logsClearRealtimeLogs()">🔍 清空日志</button>
+                        <button class="btn btn-toggle" id="realtimeToggleBtn" onclick="logsToggleRealtimeMonitor()"><span data-icon="radio"></span><span class="mtl-icon-text">实时监控</span></button>
+                        <button class="btn" disabled id="clearRealtimeBtn" onclick="logsClearRealtimeLogs()"><span data-icon="trash"></span><span class="mtl-icon-text">清空日志</span></button>
                     </div>
                 </div>
             </div>
@@ -233,7 +237,7 @@
                     </div>
                 </div>
                 <div class="form-row">
-                    <button class="btn btn-primary" id="decSubmitBtn">🔍 反编译</button>
+                    <button class="btn btn-primary" id="decSubmitBtn"><span data-icon="search"></span><span class="mtl-icon-text">反编译</span></button>
                     <button class="btn" id="decClearBtn">清空</button>
                 </div>
             </div>
@@ -247,7 +251,7 @@
 
     <div id="modal" class="modal">
         <div class="modal-content">
-            <span class="close-btn" id="modalCloseBtn">🗙</span>
+            <span class="close-btn" id="modalCloseBtn" data-icon="x"></span>
             <div id="trace-tree" class="modal-container"></div>
         </div>
     </div>
