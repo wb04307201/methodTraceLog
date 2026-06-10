@@ -197,9 +197,9 @@ body {
     border: 1px solid var(--c-border-1);
     border-radius: var(--radius-lg);
     padding: 16px 18px;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
-.card:hover { box-shadow: var(--shadow-1); }
+.card:hover { box-shadow: var(--shadow-1); transform: translateY(-1px); }
 .card-primary { border-left: 3px solid var(--c-primary); }
 .card-success { border-left: 3px solid var(--c-success); }
 .card-danger  { border-left: 3px solid var(--c-danger); }
@@ -215,8 +215,10 @@ body {
     border-radius: var(--radius-lg);
     padding: 18px 20px;
     margin-bottom: 20px;
-    transition: background-color 0.2s ease, border-color 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s, box-shadow 0.15s;
 }
+.control-panel:hover,
+.area-panel:hover { border-color: var(--c-border-2); }
 .control-panel-flex { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 
 .table-header { margin-bottom: 14px; }
@@ -273,10 +275,11 @@ body {
     font-weight: 500;
     background: var(--c-bg-1);
     color: var(--c-fg-1);
-    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
     font-family: inherit;
 }
 .btn:hover:not(:disabled) { background: var(--c-bg-2); border-color: var(--c-border-2); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary {
@@ -345,7 +348,34 @@ tbody td { padding: 8px 12px; color: var(--c-fg-1); font-variant-numeric: tabula
 tbody tr:nth-child(even) { background: var(--c-bg-3); }
 tbody tr:nth-child(even):hover { background: var(--c-bg-2); }
 
-.empty-state { text-align: center; padding: 32px; color: var(--c-fg-3); font-size: 13px; }
+/* 表格行进入:轻微上滑 + 透明度,前 10 行错开延迟(数据多时只动画前 10 行,避免长尾延迟) */
+@keyframes mtl-row-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.table-wrapper tbody tr { animation: mtl-row-in 0.25s ease-out backwards; }
+.table-wrapper tbody tr:nth-child(1)  { animation-delay: 0ms; }
+.table-wrapper tbody tr:nth-child(2)  { animation-delay: 20ms; }
+.table-wrapper tbody tr:nth-child(3)  { animation-delay: 40ms; }
+.table-wrapper tbody tr:nth-child(4)  { animation-delay: 60ms; }
+.table-wrapper tbody tr:nth-child(5)  { animation-delay: 80ms; }
+.table-wrapper tbody tr:nth-child(6)  { animation-delay: 100ms; }
+.table-wrapper tbody tr:nth-child(7)  { animation-delay: 120ms; }
+.table-wrapper tbody tr:nth-child(8)  { animation-delay: 140ms; }
+.table-wrapper tbody tr:nth-child(9)  { animation-delay: 160ms; }
+.table-wrapper tbody tr:nth-child(10) { animation-delay: 180ms; }
+
+/* ============== 空状态(通用组件) ==============
+ * 用法:MTL.renderEmpty(target, { title, hint, icon })
+ * 设计:圆形灰色 icon 容器 + 标题 + 副标题(可选)
+ */
+.empty-state { text-align: center; padding: 48px 20px; color: var(--c-fg-3); }
+.empty-state__icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--c-bg-2); color: var(--c-fg-3);
+    margin-bottom: 14px;
+}
+.empty-state__icon svg { width: 28px; height: 28px; opacity: 0.6; }
+.empty-state__title { font-size: 14px; color: var(--c-fg-2); font-weight: 500; }
+.empty-state__hint  { font-size: 12px; color: var(--c-fg-3); margin-top: 6px; }
 
 /* ============== Loading / Spinner ============== */
 .loading { text-align: center; padding: 20px; color: var(--c-fg-2); font-size: 13px; }
@@ -383,7 +413,21 @@ tbody tr:nth-child(even):hover { background: var(--c-bg-2); }
 @keyframes toastfadeout { from { opacity: 1; } to { opacity: 0; } }
 
 /* ============== Modal + Trace tree ============== */
-.modal { display: none; position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.5); }
+/* ============== Modal 弹窗 ==============
+ * 设计:背景半透明深色 + backdrop blur 让后面内容透出但不抢戏
+ * 进入:fadeIn 0.2s + 内容 slide up 4px
+ * 关闭按钮:hover 红色 + 圆底
+ */
+@keyframes mtl-modal-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.modal {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    animation: fadeIn 0.2s ease;
+}
+[data-theme="dark"] .modal,
+[data-theme="dark"] .modal { background: rgba(0, 0, 0, 0.65); }
 .modal-content {
     background: var(--c-bg-1);
     margin: 30px auto;
@@ -397,21 +441,23 @@ tbody tr:nth-child(even):hover { background: var(--c-bg-2); }
     max-height: 800px;
     overflow: hidden;
     border: 1px solid var(--c-border-1);
+    animation: mtl-modal-in 0.2s ease-out;
 }
 .close-btn {
     position: absolute;
     right: 16px; top: 12px;
-    font-size: 18px;
     cursor: pointer;
     color: var(--c-fg-2);
-    width: 28px; height: 28px;
+    width: 32px; height: 32px;
     display: flex; align-items: center; justify-content: center;
-    border-radius: var(--radius);
-    transition: background-color 0.15s, color 0.15s;
+    border-radius: 50%;
+    transition: background-color 0.15s, color 0.15s, transform 0.15s;
     background: transparent;
     border: none;
+    z-index: 2;
 }
-.close-btn:hover { color: var(--c-danger); background: var(--c-bg-2); }
+.close-btn svg { width: 18px; height: 18px; }
+.close-btn:hover { color: #fff; background: var(--c-danger); transform: rotate(90deg); }
 .modal-container {
     margin-top: 24px;
     padding: 12px;
@@ -420,21 +466,56 @@ tbody tr:nth-child(even):hover { background: var(--c-bg-2); }
     background: var(--c-bg-2);
     border-radius: var(--radius);
 }
-.tree-node { margin-left: 20px; padding: 4px 0 0 0; position: relative; border-left: 1px solid var(--c-border-1); }
+/* ============== Trace 树(调用链) ==============
+ * 结构:.tree-node 嵌套包含自身 .node-content + 子 .tree-node
+ * 引导线:父节点 ::after 画主干竖线(从 node-content 中心向下延伸),
+ *       子节点 ::before 画短横线接到主干 → 形成 L 型转角
+ * 状态色:.is-success / .is-error / .is-pending 改变边框 + 图标颜色
+ * 失败节点:.is-error 触发 pulse 动画(红框呼吸)
+ */
+.tree-node { position: relative; padding: 4px 0 0 0; margin-left: 16px; }
 .tree-node::before {
-    content: ''; position: absolute; left: -1px; top: 0;
+    content: ''; position: absolute; left: -1px; top: 14px;
     width: 10px; height: 1px; background-color: var(--c-border-2);
 }
+.tree-node:has(> .tree-node)::after {
+    content: ''; position: absolute; left: -1px; top: 14px;
+    bottom: 0; width: 1px; background-color: var(--c-border-2);
+}
+.tree-node.tree-root { margin-left: 0; }
+.tree-node.tree-root::before,
+.tree-node.tree-root::after { display: none; }
+
 .node-content {
-    display: inline-block; border-radius: var(--radius); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: var(--radius); cursor: pointer;
     font-weight: 500; transition: background-color 0.15s, color 0.15s;
-    padding: 4px 8px;
+    padding: 4px 10px 4px 8px;
     color: var(--c-fg-1);
+    border-left: 3px solid transparent;
+    font-family: var(--font-mono); font-size: 13px;
 }
-.node-content:hover {
+.node-content svg { color: var(--c-fg-2); transition: color 0.15s; }
+.node-content:hover { background: var(--c-bg-2); }
+
+/* 状态色(用 child combinator,避免父 is-error 影响子节点 .node-content) */
+.tree-node.is-success > .tree-node__inner > .node-content { border-left-color: var(--c-success); }
+.tree-node.is-success > .tree-node__inner > .node-content svg { color: var(--c-success); }
+.tree-node.is-error > .tree-node__inner > .node-content {
+    border-left-color: var(--c-danger);
     background: var(--c-primary-soft);
-    color: var(--c-primary);
 }
+.tree-node.is-error > .tree-node__inner > .node-content svg { color: var(--c-danger); }
+.tree-node.is-pending > .tree-node__inner > .node-content { border-left-color: var(--c-warn); }
+.tree-node.is-pending > .tree-node__inner > .node-content svg { color: var(--c-warn); }
+
+/* 失败节点:pulse 呼吸 */
+@keyframes mtl-pulse-error {
+    0%, 100% { box-shadow: 0 0 0 0 var(--c-danger); }
+    50%      { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.18); }
+}
+.tree-node.is-error > .tree-node__inner > .node-content { animation: mtl-pulse-error 1.6s ease-in-out infinite; }
+
 .node-info {
     display: none;
     position: fixed;

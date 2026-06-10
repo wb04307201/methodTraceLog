@@ -118,7 +118,7 @@
         document.getElementById('nextBtn').disabled = result.currentPage >= result.totalPages;
 
         const logContentEl = document.getElementById('logContent');
-        if (!result.lines || result.lines.length === 0) { logContentEl.innerHTML = '<div class="error">未找到匹配的日志</div>'; return; }
+        if (!result.lines || result.lines.length === 0) { MTL.renderEmpty(logContentEl, { title: '未找到匹配的日志', hint: '试试调整关键字 / 时间范围 / 日志级别', icon: 'search-x' }); return; }
         logContentEl.innerHTML = result.lines.map(line =>
             `<div class="log-line ${getLogLineClass(line)}">${MTL.escapeHtml(line)}</div>`
         ).join('');

@@ -90,6 +90,29 @@
         return div.innerHTML;
     }
 
+    // ============== 空状态组件 ==============
+    // 用法:MTL.renderEmpty(target, { title, hint, icon })
+    //   target: HTMLElement 或 elementId
+    //   title: 必填,主提示文字
+    //   hint:  选填,副提示(灰色小字)
+    //   icon:  选填,mtlIcons 注册的 icon 名(默认 'inbox')
+    function mtlRenderEmpty(target, options) {
+        const el = (typeof target === 'string') ? document.getElementById(target) : target;
+        if (!el) return;
+        const opts = options || {};
+        const title = opts.title || '暂无数据';
+        const hint  = opts.hint  || '';
+        const icon  = opts.icon  || 'inbox';
+        const iconHtml = (window.mtlIcon && window.MTL_ICONS && window.MTL_ICONS[icon])
+            ? window.mtlIcon(icon) : '';
+        el.innerHTML =
+            '<div class="empty-state">' +
+                '<div class="empty-state__icon">' + iconHtml + '</div>' +
+                '<div class="empty-state__title">' + mtlEscapeHtml(title) + '</div>' +
+                (hint ? '<div class="empty-state__hint">' + mtlEscapeHtml(hint) + '</div>' : '') +
+            '</div>';
+    }
+
     function onHashChange() {
         const name = (location.hash || '').replace('#', '') || 'overview';
         showTab(name);
@@ -222,6 +245,7 @@
         formatFileSize: mtlFormatFileSize,
         formatDate: mtlFormatDate,
         formatDateTime: mtlFormatDateTime,
-        escapeHtml: mtlEscapeHtml
+        escapeHtml: mtlEscapeHtml,
+        renderEmpty: mtlRenderEmpty
     };
 })();

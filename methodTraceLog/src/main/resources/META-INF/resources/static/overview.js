@@ -42,7 +42,7 @@
 
     function updateTable(data) {
         const el = document.getElementById('methodtrace');
-        if (!data || data.length === 0) { el.innerHTML = '<div class="empty-state"><p>暂无数据</p></div>'; return; }
+        if (!data || data.length === 0) { MTL.renderEmpty(el, { title: '暂无统计数据', hint: '调用方法后这里会显示耗时与成功率' }); return; }
         let html = `<div class="table-wrapper"><table><thead><tr>
                 <th>类名</th><th>方法名</th><th>调用</th><th>成功</th><th>成功率</th><th>耗时(ms)</th>
             </tr></thead><tbody>`;
@@ -63,7 +63,7 @@
 
     function updateMethodTable(data) {
         const el = document.getElementById('method');
-        if (!data || data.length === 0) { el.innerHTML = '<div class="empty-state"><p>暂无数据</p></div>'; return; }
+        if (!data || data.length === 0) { MTL.renderEmpty(el, { title: '暂无调用记录', hint: '调用任何被追踪的方法后会出现在这里' }); return; }
         let html = `<div class="table-wrapper"><table><thead><tr>
                 <th>类名</th><th>方法名</th><th>开始时间</th><th>结束时间</th><th>耗时(ms)</th><th>状态</th><th>链路</th>
             </tr></thead><tbody>`;
@@ -94,7 +94,7 @@
 
     // 给 traces tab 复用
     function renderTraceRows(data) {
-        if (!data || data.length === 0) return '<div class="empty-state"><p>暂无匹配的调用记录</p></div>';
+        if (!data || data.length === 0) return '<div class="empty-state"><div class="empty-state__icon">' + (window.mtlIcon ? window.mtlIcon('search-x') : '') + '</div><div class="empty-state__title">未匹配到调用记录</div><div class="empty-state__hint">试试调整过滤条件或扩大范围</div></div>';
         let html = `<div class="table-wrapper"><table><thead><tr>
                 <th>类名</th><th>方法名</th><th>开始时间</th><th>结束时间</th><th>耗时(ms)</th><th>状态</th><th>链路</th>
             </tr></thead><tbody>`;
@@ -148,17 +148,23 @@
     }
 
     // ===== Modal: trace tree =====
-    function createTree(data, container) {
+    function createTree(data, container, isRoot) {
         const nodeContainer = document.createElement('div');
         nodeContainer.className = 'tree-node';
+        if (isRoot) nodeContainer.classList.add('tree-root');
+        // 状态 class(供 CSS 着色 + pulse 动画用)
+        if (!data.after) nodeContainer.classList.add('is-pending');
+        else if (data.after.logActionEnum === 'AFTER_RETURN') nodeContainer.classList.add('is-success');
+        else if (data.after.logActionEnum === 'AFTER_THROW') nodeContainer.classList.add('is-error');
         nodeContainer.appendChild(createNodeElement(data));
         if (data.children && data.children.length > 0) {
-            data.children.forEach(child => createTree(child, nodeContainer));
+            data.children.forEach(child => createTree(child, nodeContainer, false));
         }
         container.appendChild(nodeContainer);
     }
     function createNodeElement(nodeData) {
         const nodeElement = document.createElement('div');
+        nodeElement.className = 'tree-node__inner';
         const content = document.createElement('div');
         content.className = 'node-content';
 
@@ -215,7 +221,7 @@
             .then(data => {
                 const container = document.getElementById('trace-tree');
                 container.innerHTML = '';
-                createTree(data, container);
+                createTree(data, container, true);
                 MTL.openModal();
             })
             .catch(e => MTL.toast(e.message));

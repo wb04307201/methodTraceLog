@@ -20,8 +20,7 @@
     }
 
     function renderEmpty(msg) {
-        document.getElementById('tracesTable').innerHTML =
-            `<div class="empty-state"><p>${msg}</p></div>`;
+        MTL.renderEmpty('tracesTable', { title: msg, hint: '试试调整类名/方法名过滤条件', icon: 'search-x' });
     }
 
     function query() {

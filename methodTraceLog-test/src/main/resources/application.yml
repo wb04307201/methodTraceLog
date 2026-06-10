@@ -14,7 +14,7 @@ method-trace-log:
     max-lines: 1000    # 单次查询最大行数
     max-file-size: 100    # 文件最大大小（MB）
   security:
-    api-key: test-secret-1234    # 生产环境必须配置；测试用
+    api-key: ${METHOD_TRACE_LOG_API_KEY:}    # 从环境变量读取,默认空(dev 模式,不鉴权)
   decompile:
     timeout-seconds: 10
 management:
