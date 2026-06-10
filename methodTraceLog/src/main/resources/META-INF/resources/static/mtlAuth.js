@@ -85,7 +85,7 @@
                 <span class="mtl-auth-bar__icon">🔑</span>
                 <label for="mtlAuthKey">请输入 API Key</label>
                 <input id="mtlAuthKey" class="mtl-auth-bar__input" type="password"
-                       placeholder="X-Api-Key" autocomplete="off" />
+                       placeholder="X-Api-Key" autocomplete="off" maxlength="512" />
                 <button id="mtlAuthSubmit" class="mtl-auth-bar__btn">登录</button>
                 <span id="mtlAuthErr" class="mtl-auth-bar__err" hidden></span>
             </div>

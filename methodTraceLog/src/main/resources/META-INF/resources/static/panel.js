@@ -11,7 +11,7 @@
  *  - showTab(name, {skipOnShow}): 切显示 + 通知 tab 模块 onShow(可选)
  *  - 4 个 tab 模块通过 window.MTL.registerTab(name, {onShow, onHide}) 注册
  *  - Toast: MTL.toast(msg)
- *  - Modal: mtlOpenTraceModal(traceid) / mtlCloseModal()
+ *  - Modal: MTL.openModal() / MTL.closeModal()(通用弹窗;调用链弹窗在 overview.js 的 window.MTLTrace 中)
  */
 (function () {
     'use strict';
