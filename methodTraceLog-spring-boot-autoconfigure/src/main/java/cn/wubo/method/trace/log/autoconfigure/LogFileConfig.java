@@ -11,8 +11,9 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -76,9 +77,8 @@ public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     @Bean("wb04307201MethodTraceLogFileRouter")
-    public RouterFunction<ServerResponse> methodTraceLogFileRouter(LogFileService fileService, Validator validator) {
+    public RouterFunction<ServerResponse> methodTraceLogFileRouter(LogFileService fileService, LogFileRealTimeService logFileRealTimeService, Validator validator) {
         RouterFunctions.Builder builder = RouterFunctions.route();
-        builder.GET("/methodTraceLog/logFile", request -> ServerResponse.ok().contentType(MediaType.TEXT_HTML).body(new ClassPathResource(("/logFile.html"))));
         builder.GET("/methodTraceLog/logFile/files", accept(MediaType.APPLICATION_JSON), request -> ServerResponse.ok().body(fileService.getLogFiles()));
         builder.POST("/methodTraceLog/logFile/query", accept(MediaType.APPLICATION_JSON), request -> {
             LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
@@ -97,6 +97,16 @@ public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
                 return null;
             });
         });
+        // REST 端点：start/stop/status。和现有 STOMP /app/start-monitor 等并存，互不干扰。
+        builder.GET("/methodTraceLog/logFile/monitor/start", request -> {
+            String fileName = request.param("fileName").orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "fileName is required"));
+            return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(logFileRealTimeService.startMonitoring(fileName));
+        });
+        builder.GET("/methodTraceLog/logFile/monitor/stop", request -> {
+            String fileName = request.param("fileName").orElse("");
+            return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(logFileRealTimeService.stopMonitoring(fileName));
+        });
+        builder.GET("/methodTraceLog/logFile/monitor/status", request -> ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(logFileRealTimeService.getMonitorStatus()));
         return builder.build();
     }
 

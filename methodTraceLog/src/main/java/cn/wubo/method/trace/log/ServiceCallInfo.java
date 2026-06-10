@@ -2,9 +2,11 @@ package cn.wubo.method.trace.log;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.aspectj.lang.reflect.MethodSignature;
 
 @Data
+@NoArgsConstructor
 @AllArgsConstructor
 public class ServiceCallInfo {
     private String traceid;

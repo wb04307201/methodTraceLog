@@ -53,4 +53,12 @@ public class TestComponent {
         return text + "🥲";
     }
 
+    /**
+     * 演示 @AspectLog：方法名在 trace 中显示为 "aspectLogDemo" 而非 "realImplMethod"。
+     */
+    @AspectLog("aspectLogDemo")
+    public String aspectLogDemo(String name) {
+        return "hello " + name;
+    }
+
 }

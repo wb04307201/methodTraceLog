@@ -13,17 +13,14 @@ method-trace-log:
       - .out
     max-lines: 1000    # 单次查询最大行数
     max-file-size: 100    # 文件最大大小（MB）
+  security:
+    api-key: test-secret-1234    # 生产环境必须配置；测试用
+  decompile:
+    timeout-seconds: 10
 management:
   endpoints:
     web:
       exposure:
         include: methodtrace
-spring:
-  ai:
-    ollama:
-      chat:
-        options:
-          model: qwen3-coder
-      base-url: http://localhost:11434
-
-
+server:
+  port: 8088

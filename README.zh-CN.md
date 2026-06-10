@@ -1,204 +1,240 @@
-# Method Trace Log - 方法追踪日志
+# Method Trace Log - 方法观测日志
 
 <div align="right">
   <a href="README.md">English</a> | 中文
 </div>
 
->  一个用于方法追踪日志的starter组件，提供方法调用链路追踪、性能监控、日志文件管理和（可选的）AI时间复杂度分析、AI调用链分析等功能。
+> Spring Boot starter，提供方法调用链路追踪、性能监控、日志文件管理、CFR 反编译。附带独立 MCP 服务（`methodTraceLog-mcp`），通过 stdio 把上述能力开放给 AI Agent。
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
 [![fork](https://gitee.com/wb04307201/methodTraceLog/badge/fork.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
 [![star](https://img.shields.io/github/stars/wb04307201/methodTraceLog)](https://github.com/wb04307201/methodTraceLog)
-[![fork](https://img.shields.io/github/forks/wb04307201/methodTraceLog)](https://github.com/wb04307201/methodTraceLog)  
+[![fork](https://img.shields.io/github/forks/wb04307201/methodTraceLog)](https://github.com/wb04307201/methodTraceLog)
 ![MIT](https://img.shields.io/badge/License-Apache2.0-blue.svg) ![JDK](https://img.shields.io/badge/JDK-17+-green.svg) ![SpringBoot](https://img.shields.io/badge/Spring%20Boot-3+-green.svg)
-
----
 
 ![gif.gif](gif.gif)
 
-## 功能特性
+---
 
-### 方法追踪
-- 自动记录方法调用链路
-- 支持方法执行时间统计
-- 可视化展示调用关系和耗时
-- 支持异常捕获和记录
+## 功能
 
-### 日志文件管理
-- 实时查看日志文件内容
-- 支持日志文件下载
-- 日志内容搜索和过滤
-- WebSocket实时日志推送
-
-### AI代码分析（可选）
-- 时间复杂度分析
-- 性能优化建议
-- 代码质量评估
-- 可视化分析结果展示
+| | |
+|---|---|
+| **方法追踪** | AOP 拦截，全链路 `traceid` / `spanid` / `pspanid`；可采样；`@AspectLog` 可改名 |
+| **指标** | 每个方法的 Micrometer `Timer` + 父子 `MethodTraceInfo` 树；通过 `actuator/methodtrace` 暴露 |
+| **日志文件** | 读 / 过滤 / 下载；WebSocket 实时 tail；路径穿越保护 |
+| **CFR 反编译** | HTTP 端点，支持应用类 / 第三方 jar / fat-jar 嵌套，自动去除注解 |
+| **OTel 导出** | classpath 上有 `opentelemetry-sdk` 时自动桥接到 OTLP/HTTP |
+| **W3C traceparent** | HTTP 入站和 `RestClient` 出站自动注入/提取 |
+| **Cookie 会话** | 浏览器 `POST /methodTraceLog/login` 登录；CLI / MCP 继续用 `X-Api-Key` |
+| **MCP 服务** | 独立 stdio 进程；13 个工具，多主机，通过 HTTP 转发到目标应用 |
 
 ---
 
-## 引入
+## 快速开始
 
-### 增加 JitPack 仓库
-```xml
-<repositories>
-    <repository>
-        <id>jitpack.io</id>
-        <url>https://jitpack.io</url>
-    </repository>
-</repositories>
-```
+### 引入依赖
 
-### Maven依赖
 ```xml
 <dependency>
     <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.19</version>
+    <version>1.0.20</version>
 </dependency>
 ```
 
-### 配置文件
-添加配置:
+### 最小配置
+
 ```yaml
 method-trace-log:
   log:
-    enable: true          # 是否启用方法追踪，默认true
-    serviceCalls:        # 启动时便开启的日志服务，默认无需配置全部开启，生产环境可以配置全部关闭，在需要时可通过web界面开启
-      - name: SimpleLogService  # 日志输出服务
-        enable: false
-      - name: SimpleMonitorService  # 指标监控服务
-        enable: false
+    enable: true
   file:
-    enable: true          # 是否启用文件相关功能，默认true
-    path: ./logs          # 日志文件路径
-    allowed-extensions:   # 允许访问的文件扩展名
-      - .log
-      - .txt
-      - .out
-    max-lines: 1000       # 单次查询最大行数
-    max-file-size: 100    # 文件最大大小（MB）
-    # 日志文件匹配模式, 
-    # 默认(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
-    # 匹配%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n日志输出格式
-    log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
+    enable: true
+    path: ./logs
+  security:
+    api-key: change-me-in-production   # 生产环境必填；留空则关闭鉴权（仅限开发）
+
 management:
   endpoints:
     web:
       exposure:
-        include: methodtrace # 开启自定义端点
+        include: methodtrace           # 面板依赖的端点
 ```
 
-### AI分析配置（可选）
+### 打开面板
 
-如果需要使用AI代码分析功能，需要引入和配置Spring AI，下面以通过ollama调用qwen3为例：
+`http://localhost:8080/methodTraceLog/panel` —— 单页 4 个 tab：概览 / 调用记录（含 JSON/CSV 导出）/ 日志文件（含实时 tail）/ 反编译（CFR）。
+
+---
+
+## 配置参考
+
+```yaml
+method-trace-log:
+  log:
+    enable: true                                  # AOP 总开关
+    sample-rate: 1.0                              # 0.0 ~ 1.0；子调用继承父决定
+    service-calls:                                # 启动时各服务开关
+      - { name: CustomLog,         enable: false }   # 内置 3 个: SimpleLogService / SimpleMonitorService / CustomLog
+    trace-store:                                  # 内存 trace 树持久化
+      type: in-memory                             # in-memory | file | none
+      path: ./trace-store                         # 仅 type=file 时生效（自动按 yyyy-MM-dd 建子目录）
+      ttl-millis: 28800000                        # 8 小时
+      max-traces: 10000                           # recent map 上限
+  file:
+    enable: true
+    path: ./logs
+    allowed-extensions: [.log, .txt, .out]
+    max-lines: 1000
+    max-file-size: 100                            # MB
+    # log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
+  security:
+    api-key: change-me-in-production              # 留空 = 关闭鉴权
+    session:
+      ttl-millis: 28800000                        # 浏览器 cookie 会话 8h 滑动过期
+  decompile:
+    timeout-seconds: 10                           # CFR daemon 线程超时
+  otel:                                           # 需要 classpath 上有 opentelemetry-sdk
+    enable: false
+    endpoint: http://localhost:4318/v1/traces
+    service-name: method-trace-log
+  propagate:                                      # W3C traceparent 传播
+    http-inbound: true                            # TraceContextFilter 读 traceparent
+    rest-client-outbound: true                    # RestClient.Builder 拦截器
+    rest-template-interceptor: true               # 暴露 RestTemplate 拦截器 Bean
+```
+
+---
+
+## HTTP 端点
+
+`security.api-key` 非空时，除 `/methodTraceLog/panel`（HTML 页面本身）外，所有路由都需要 `X-Api-Key` 或 `MTRACE_SESSION` cookie。
+
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| GET | `/methodTraceLog/panel` | HTML 面板 — 4 tab（白名单） |
+| GET | `/methodTraceLog/view/callServices` | 服务列表 + 当前 enable |
+| GET | `/methodTraceLog/view/callService?name=&enable=` | 运行时开关 |
+| GET | `/methodTraceLog/view/list?className=&methodName=&onlyErrors=&limit=` | 最近根 trace |
+| GET | `/methodTraceLog/view/traceid?id=` | 单个 trace 完整调用链 |
+| GET | `/methodTraceLog/view/export?format=json\|csv&className=&methodName=&onlyErrors=&limit=` | 批量导出（默认 limit 1000） |
+| GET | `/methodTraceLog/decompile?className=&methodName=&timeoutSeconds=` | text/plain 源码 |
+| GET | `/methodTraceLog/logFile/files` | 日志目录文件列表 |
+| POST | `/methodTraceLog/logFile/query` | 关键字 / 时间 / 级别过滤分页 |
+| POST | `/methodTraceLog/logFile/download` | 流式下载 |
+| GET | `/methodTraceLog/logFile/monitor/{start,stop,status}?fileName=` | REST 实时 tail（STOMP 之外） |
+| POST | `/methodTraceLog/login` | Body `{"apiKey":"..."}` → `Set-Cookie: MTRACE_SESSION=...` |
+| POST | `/methodTraceLog/logout` | 销毁会话 |
+| GET | `/methodTraceLog/session/status` | `{ sessionValid: true/false }` |
+| WS | `/ws` (SockJS) → `/topic/log-monitor` | 实时日志推送；STOMP 发送到 `/app/{start-monitor,stop-monitor,monitor-status,heartbeat}` |
+| GET | `/actuator/methodtrace` | 每个方法 / 每个类的 Micrometer 统计 |
+
+---
+
+## MDC 中的 trace id
+
+`LogAspect` 把 `traceid` / `spanid` / `pspanid` 写入 SLF4J MDC。把它放进 logback pattern 就能让日志自带链路信息：
+
 ```xml
-<dependencyManagement>
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-bom</artifactId>
-            <version>1.0.2</version>
-            <type>pom</type>
-            <scope>import</scope>
-        </dependency>
-    </dependencies>
-</dependencyManagement>
-<dependencies>
-    <dependency>
-        <groupId>org.springframework.ai</groupId>
-        <artifactId>spring-ai-starter-model-ollama</artifactId>
-    </dependency>
-</dependencies>
+<pattern>%d{HH:mm:ss.SSS} [%thread] [trace=%X{traceid} span=%X{spanid}] %-5level %logger - %msg%n</pattern>
 ```
 
-```yaml
-spring:
-  ai:
-    ollama:
-      chat:
-        options:
-          model: qwen3    # 使用的模型
-      base-url: http://localhost:11434
-```
+跨服务时 `TraceContextFilter` 解析入站 `traceparent`，`RestClient` 拦截器给所有出站请求注入 `traceparent` —— 上下游 `traceid` 自动接上。
 
-## 使用
+---
 
-### 默认输出方的法日志：
-```
-2025-08-18T10:59:45.638+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: null, spanid: a52a7934-88d3-44e9-bcf5-1469a0364493, classname: cn.wubo.method.trace.log.TestController, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestController.get(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1755485985638
-2025-08-18T10:59:45.644+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: a52a7934-88d3-44e9-bcf5-1469a0364493, spanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, classname: cn.wubo.method.trace.log.TestService, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestService.hello(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1755485985644
-2025-08-18T10:59:45.647+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, spanid: 4c1ba448-612b-463a-8f75-a3eb6262e37f, classname: cn.wubo.method.trace.log.TestComponent, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestComponent.hello(java.lang.String), context: [java], logActionEnum: LogActionEnum.BEFORE(desc=方法执行前), time: 1755485985647
-2025-08-18T10:59:45.647+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, spanid: 4c1ba448-612b-463a-8f75-a3eb6262e37f, classname: cn.wubo.method.trace.log.TestComponent, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestComponent.hello(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1755485985647
-2025-08-18T10:59:45.648+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: a52a7934-88d3-44e9-bcf5-1469a0364493, spanid: e9526f48-e423-4112-a9e2-8b3843c0d15a, classname: cn.wubo.method.trace.log.TestService, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestService.hello(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1755485985648
-2025-08-18T10:59:45.648+08:00  INFO 17236 --- [           main] c.w.m.t.l.s.impl.DefaultLogServiceImpl   : traceid: 734415a6-6059-42c9-95ee-399dd4877aab, pspanid: null, spanid: a52a7934-88d3-44e9-bcf5-1469a0364493, classname: cn.wubo.method.trace.log.TestController, methodSignature: public java.lang.String cn.wubo.method.trace.log.TestController.get(java.lang.String), context: JAVA say:'hello world!', logActionEnum: LogActionEnum.AFTER_RETURN(desc=方法执行后), time: 1755485985648
-```
+## Web 面板鉴权
 
-追踪id - traceid
-跨度id - spanid
-父跨度id - pspanid
-通过traceid，spanid，pspanid可以追踪调用链
+`security.api-key` 非空时,面板用页面顶部的**横幅**(不是弹窗)收集 API Key:
 
+- 首次访问 `/methodTraceLog/panel` 且没有有效 session 时,横幅出现在 tab 内容上方。
+- 提交正确的 Key(点按钮或按 **Enter**)后,横幅消失、`MTRACE_SESSION` cookie 被设置,当前 tab 的数据**自动加载**——无需手动刷新。
+- 错误 / 空 Key 会显示行内错误(`请输入 API Key` / `❌ API Key 无效或鉴权未启用`)。
+- Session 是 **8 小时滑动 cookie**(`security.session.ttl-millis`,默认 28 800 000)。每次使用都会续期,所以 8 小时不操作或点 **🚪 注销** 之前都不用重输。
+- header 上的登出按钮只在有 session 时才出现;`/methodTraceLog/logout` 销毁 cookie 后,横幅会自动重新挂载。
+- 开发模式(`api-key: ""`)下横幅完全不显示,也不会有登出按钮。
 
-### 使用监控面板和Actuator集成
-项目集成了Spring Boot Actuator，需要配置暴露methodtrace端点才能使用监控面板全部功能：
-```yaml
-management:
-  endpoints:
-    web:
-      exposure:
-        include: methodtrace
-```
+`GET /methodTraceLog/session/status` 返回 `{ authEnabled, sessionValid }`,面板 JS 据此决定是否显示横幅。横幅挂着时,页面内的 `mtlFetch` 会把 401 暂存到队列,登录成功后自动重放,登录过程中不会出现 "unauthorized" 提示。
 
-通过URL访问内置方法调用监控面板: `http://localhost:8080/methodTraceLog/view`
-![img.png](img.png)
-![img_1.png](img_1.png)
-如果配置了AI分析功能。则可以分析方法的时间复杂度以及优化建议
-![img_2.png](img_2.png)
-![img_3.png](img_3.png)
-![img_4.png](img_4.png)
-![img_5.png](img_5.png)
-如果配置了AI分析功能。则可以分析调用链路性能以及优化建
-![img_6.png](img_6.png)
+CLI / MCP 客户端继续用 `X-Api-Key` 请求头即可,cookie session 只是为了浏览器体验更顺。
 
+---
 
-### 使用日志文件管理
+## `@AspectLog` 注解
 
-通过URL访问日志文件查看器: `http://localhost:8080/methodTraceLog/logFile`
-![img_7.png](img_7.png)
-
-
-### 可以继承[AbstractCallService.java](methodTraceLog/src/main/java/cn/wubo/method/trace/log/AbstractCallService.java)接口并实现自定义日志数据据的处理
+方法级独立开关（不要求所在类是 `@Component`）。用来给 trace 列表和 OTel span 起个可读名：
 
 ```java
-@Slf4j
-public class CustomLogServiceImpl extends AbstractCallService {
-
-    public static final String LOG_TEMPLATE = "custom-log traceid: {}, pspanid: {}, spanid: {}, classname: {}, methodSignature: {}, context: {}, logActionEnum: {}, time: {}";
-
-    @Override
-    public void consumer(ServiceCallInfo serviceCallInfo) {
-        if (serviceCallInfo.getLogActionEnum() == LogActionEnum.AFTER_THROW)
-            log.error(LOG_TEMPLATE, serviceCallInfo.getTraceid(), serviceCallInfo.getPspanid(), serviceCallInfo.getSpanid(), serviceCallInfo.getClassName(), serviceCallInfo.getMethodSignature(), transContext(serviceCallInfo.getContext()), serviceCallInfo.getLogActionEnum(), serviceCallInfo.getTimeMillis());
-        else
-            log.info(LOG_TEMPLATE, serviceCallInfo.getTraceid(), serviceCallInfo.getPspanid(), serviceCallInfo.getSpanid(), serviceCallInfo.getClassName(), serviceCallInfo.getMethodSignature(), transContext(serviceCallInfo.getContext()), serviceCallInfo.getLogActionEnum(), serviceCallInfo.getTimeMillis());
-    }
-
-    @Override
-    public String getCallServiceName() {
-        return "CustomLog";
-    }
-
-    @Override
-    public String getCallServiceDesc() {
-        return "自定义日志";
-    }
+public class MyHelper {
+    @AspectLog("do-something")
+    public void doSomething(String s) { ... }
 }
 ```
 
+trace 列表和 OTel span name 会显示 `do-something` 而不是原始方法签名。
 
+---
 
+## 自定义 `ICallService`
 
+继承 `AbstractCallService` 实现 `consumer(ServiceCallInfo)`，由 `CallServiceStrategy` 自动发现：
 
+```java
+@Component
+public class MyService extends AbstractCallService {
+
+    @Override
+    public void consumer(ServiceCallInfo info) {
+        // logActionEnum: BEFORE / AFTER_RETURN / AFTER_THROW
+        log.info("{} {}", info.getClassName(), info.getMethodName());
+    }
+
+    @Override public String getCallServiceName() { return "MyService"; }
+    @Override public String getCallServiceDesc() { return "我的服务"; }
+}
+```
+
+启动时关闭：`service-calls: [{ name: MyService, enable: false }]`，再用面板开。
+
+---
+
+## MCP 服务
+
+独立 Spring Boot 进程，stdio 通信，把 `@Tool` 调用通过 HTTP 转发到一个或多个目标主机（每个目标 = 部署了 starter 的应用）。
+
+```xml
+<dependency>
+    <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
+    <artifactId>methodTraceLog-mcp</artifactId>
+    <version>1.0.20</version>
+</dependency>
+```
+
+```yaml
+method-trace-log:
+  mcp:
+    hosts:
+      - { name: local-dev, url: http://localhost:8080, description: 本地开发, api-key: change-me-in-production }
+      - { name: staging,   url: https://staging.example.com, description: 预发, api-key: ${STAGING_API_KEY} }
+```
+
+stdjar 方式启动（由 AI 客户端拉起）：
+
+```bash
+java -jar methodTraceLog-mcp-1.0.20.jar
+```
+
+**13 个工具**：`getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`。
+
+---
+
+## 使用注意
+
+- **LogAspect 排除规则**：框架内部类型（`ICallService` / `MethodTraceLogEndPoint` / `LogFileService` / `LogFileRealTimeService`）默认不追踪。如果有类似内部 bean 不想被追踪，加入 `LogAspect` 的 pointcut 表达式。
+- **路径穿越保护**：`FileUtils.pathInspection` 是 `LogFileService` 和 `LogFileRealTimeService` 共用的白名单 —— `[a-zA-Z0-9._-]+`，不允许 `..`，长度 ≤ 255。
+- **日志 pattern**：默认 `log-pattern` 只匹配标准 logback pattern。如果改了 `logback.xml` 里的 `<pattern>`，要同步更新 `log-pattern`，否则 `LogLineInfo.parse` 不会拆分关键字 / 级别 / 时间。
+- **CFR 资源**：通过 ClassLoader 的 `getResourceAsStream` 读 class 字节 —— 文件路径、thin jar、Spring Boot fat-jar 嵌套 jar 都通用。不要去解析 `URL.getPath()` 字符串。
+- **Spring Boot fat-jar**：测试模块没有声明 `spring-boot-maven-plugin`，所以 `mvn package` 出来的 jar 没主清单。运行方式：`mvn package` 之后 `java -cp target/classes;<classpath> cn.wubo.method.trace.log.MethodTraceLogTestApplication`。
+- **Maven**：本机 `mvn` 命令是坏的，调用 `/c/developer/apache-maven-3.9.16/bin/mvn`。

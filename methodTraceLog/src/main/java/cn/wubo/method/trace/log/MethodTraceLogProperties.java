@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 import java.util.*;
 
@@ -11,102 +12,37 @@ import java.util.*;
 @ConfigurationProperties(prefix = "method-trace-log")
 public class MethodTraceLogProperties {
 
+    @NestedConfigurationProperty
     private LogProperties log = new LogProperties();
 
+    @NestedConfigurationProperty
     private FileProperties file = new FileProperties();
 
-    private AiProperties timeComplexity = new AiProperties("你是一个专业的代码时间复杂度分析专家。请严格按照JSON格式返回分析结果，不要包含任何其他文本。",
-            """
-            请分析以下java代码的时间复杂度，并返回严格的JSON格式结果：
-            
-            代码：
-            ```java
-            %s
-            ```
-            
-            分析模式：快速模式（基于启发式规则）
-            
-            请返回以下JSON格式的分析结果（不要包含任何其他文本）：
-            
-            {
-              "overallComplexity": "整体时间复杂度（如O(n²)）",
-              "confidence": 分析置信度（0-100的数字）,
-              "explanation": "详细的复杂度分析说明",
-              "lineAnalysis": [
-                {
-                  "lineNumber": 行号,
-                  "complexity": "该行的时间复杂度",
-                  "explanation": "该行复杂度的详细解释",
-                  "code": "该行的代码内容"
-                }
-              ],
-              "suggestions": [
-                {
-                  "type": "优化类型（space-time-tradeoff/algorithm-refactor/data-structure/loop-optimization）",
-                  "title": "优化建议标题",
-                  "description": "详细的优化建议描述",
-                  "codeExample": "优化后的示例代码",
-                  "impact": "影响程度（high/medium/low）"
-                }
-              ],
-              "visualData": {
-                "chartData": [
-                  {"inputSize": 10, "operations": 100, "complexity": "O(n²)"},
-                  {"inputSize": 100, "operations": 10000, "complexity": "O(n²)"},
-                  {"inputSize": 1000, "operations": 1000000, "complexity": "O(n²)"}
-                ],
-                "complexityBreakdown": [
-                  {"section": "循环部分", "complexity": "O(n²)", "percentage": 80, "color": "#ef4444"},
-                  {"section": "初始化部分", "complexity": "O(1)", "percentage": 20, "color": "#22c55e"}
-                ]
-              }
-            }
-            
-            请确保：
-            1. 分析所有重要的代码行，特别是循环、递归和函数调用
-            2. 提供具体的优化建议和示例代码
-            3. 生成合理的可视化数据
-            4. 置信度要基于代码的复杂程度和分析的准确性
-            5. 返回的JSON必须是有效的格式，不包含注释或其他文本
-            """);
+    /**
+     * 安全配置：API Key 用于保护 /methodTraceLog/** 反编译等敏感端点。
+     * 留空表示关闭鉴权（仅限开发环境）。生产环境务必配置。
+     */
+    @NestedConfigurationProperty
+    private SecurityProperties security = new SecurityProperties();
 
-    private AiProperties callChain = new AiProperties("你是一个资深的Java架构师，擅长分析应用调用链路并提出优化建议。请严格按照JSON格式返回分析结果，不要包含任何其他文本。",
-            """
-            以下是一组调用链路数据，请分析并提供架构优化建议：
-            
-            ```json
-            %s
-            ```
-            
-            请按照以下格式返回JSON响应：
-            {
-              "overallAssessment": "整体评估摘要",
-              "bottlenecks": [
-                {
-                  "className": "类名",
-                  "methodName": "方法名",
-                  "issue": "存在的问题",
-                  "recommendation": "优化建议"
-                }
-              ],
-              "suggestions": [
-                {
-                  "category": "优化类别",
-                  "description": "详细说明",
-                  "priority": "优先级(high/medium/low)"
-                }
-              ],
-              "confidence": 0-100的置信度分数
-            }
-            
-            请确保：
-            1. 分析调用链深度、各方法执行时间
-            2. 识别潜在性能瓶颈
-            3. 提供具体可行的优化建议
-            4. 置信度要基于分析的准确性
-            5. 返回的JSON必须是有效的格式，不包含其他文本
-            """);
+    /**
+     * 反编译相关配置。
+     */
+    @NestedConfigurationProperty
+    private DecompileProperties decompile = new DecompileProperties();
 
+    /**
+     * OpenTelemetry 导出配置。导出器为 ICallService，OTLP/HTTP 协议。
+     * 仅当 classpath 上有 {@code io.opentelemetry:opentelemetry-sdk} 时才注册。
+     */
+    @NestedConfigurationProperty
+    private OtelProperties otel = new OtelProperties();
+
+    /**
+     * 跨线程/跨服务 trace 传播配置。
+     */
+    @NestedConfigurationProperty
+    private PropagateProperties propagate = new PropagateProperties();
 
     @Data
     public static class LogProperties {
@@ -114,6 +50,16 @@ public class MethodTraceLogProperties {
 
         private List<ServiceCallProperties> serviceCalls = new ArrayList<>();
 
+        /**
+         * 根调用采样率，[0.0, 1.0]。1.0 = 全部采样（默认），0.0 = 全部丢弃。
+         * 子调用自动继承父调用的采样决定。
+         */
+        private Double sampleRate = 1.0;
+
+        /**
+         * trace 持久化配置。
+         */
+        private TraceStoreProperties traceStore = new TraceStoreProperties();
 
         @Data
         @NoArgsConstructor
@@ -122,6 +68,39 @@ public class MethodTraceLogProperties {
             private String name;
             private Boolean enable = true;
         }
+    }
+
+    @Data
+    public static class TraceStoreProperties {
+        /**
+         * 存储类型：in-memory（默认，进程内 ConcurrentHashMap）
+         *          file（每条根 trace 落盘为 JSON 文件，适合长时间跑/避免 OOM）
+         *          none（不存储，Micrometer 指标仍然写入）
+         */
+        private String type = "in-memory";
+
+        /**
+         * 仅当 type=file 时生效：根目录。会自动按 yyyy-MM-dd 建子目录。
+         */
+        private String path = "./trace-store";
+
+        /**
+         * 根 trace 在内存中保留的最大数量。超出按写入时间淘汰最旧。
+         * 仅影响 in-memory 与 file 的内存缓存。
+         */
+        private int maxTraces = 1000;
+
+        /**
+         * 过期时长（毫秒）。clean() 会删除超过此时间的磁盘文件。
+         * 默认 8 小时。
+         */
+        private Long ttlMillis = 8L * 60 * 60 * 1000L;
+
+        /**
+         * 仅当 type=file 时生效：启动时扫描目录重建 traceId → file 索引。
+         * 文件量大时会拖慢启动；保持默认 false。
+         */
+        private boolean rebuildIndexOnStart = false;
     }
 
     @Data
@@ -140,7 +119,7 @@ public class MethodTraceLogProperties {
         private List<String> allowedExtensions = Arrays.asList(".log", ".txt", ".out");
 
         /**
-         * 单次查询最大行数
+         * 单次查询最大行数（同时也是 query 路径下流式扫描的最大行数）
          */
         private int maxLines = 1000;
 
@@ -156,11 +135,96 @@ public class MethodTraceLogProperties {
     }
 
     @Data
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class AiProperties {
-        private String system;
-        private String promptTemplate;
+    public static class SecurityProperties {
+        /**
+         * API Key。若为空字符串或 null 则关闭鉴权（仅供开发/本地）。
+         * 鉴权生效后，浏览器可通过 cookie 鉴权，CLI / MCP 可继续用 X-Api-Key header。
+         */
+        private String apiKey = "";
 
+        /**
+         * 浏览器端 cookie 会话配置。
+         */
+        private SessionProperties session = new SessionProperties();
+    }
+
+    @Data
+    public static class SessionProperties {
+        /**
+         * 会话有效期。超过此时间未访问则失效。
+         */
+        private long ttlMillis = 8L * 60 * 60 * 1000L;
+    }
+
+    @Data
+    public static class DecompileProperties {
+        /**
+         * 反编译单次调用的默认超时（秒）。CFR 在病态输入下可能长时间运行。
+         * 最小 1 秒（0 秒会导致永远 timeout 必抛 IllegalStateException）。
+         */
+        private long timeoutSeconds = 10L;
+    }
+
+    @Data
+    public static class OtelProperties {
+        /**
+         * 是否注册 OTLP/HTTP Span 导出器作为 ICallService。
+         * 即使开启，也只在 trace 被采样时才会发送（由 LogAspect 短路未被采样的 trace）。
+         */
+        private boolean enable = false;
+
+        /**
+         * OTLP HTTP endpoint，例如 http://localhost:4318/v1/traces。
+         */
+        private String endpoint = "http://localhost:4318/v1/traces";
+
+        /**
+         * Resource service.name 标签。
+         */
+        private String serviceName = "method-trace-log";
+
+        /**
+         * Resource service.namespace 标签。
+         */
+        private String serviceNamespace = "";
+
+        /**
+         * 批量导出延迟（毫秒）。OTLP 客户端内置 batching。
+         */
+        private long exportDelayMillis = 5000L;
+
+        /**
+         * 批量导出最大队列大小。
+         */
+        private int maxQueueSize = 2048;
+
+        /**
+         * 单批最大导出跨度。
+         */
+        private int maxExportBatchSize = 512;
+
+        /**
+         * 导出超时（毫秒）。
+         */
+        private long exportTimeoutMillis = 30000L;
+    }
+
+    @Data
+    public static class PropagateProperties {
+        /**
+         * 注册 TraceContextFilter：从 HTTP 请求的 traceparent 头恢复 traceid/parentId/sampled。
+         */
+        private boolean httpInbound = true;
+
+        /**
+         * 给 RestClient.Builder 注册拦截器：自动给所有出站 HTTP 请求注入 traceparent。
+         */
+        private boolean restClientOutbound = true;
+
+        /**
+         * 是否提供 TraceContextRestTemplateInterceptor Bean。
+         * 用户需要主动把它设置到自己的 RestTemplate 上。
+         */
+        private boolean restTemplateInterceptor = true;
     }
 }
