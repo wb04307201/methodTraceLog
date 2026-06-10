@@ -149,23 +149,35 @@
             console.warn('[mtlAuth] container #' + containerId + ' not found');
             return;
         }
+        // 同一 slot 重复挂载：取消残留的卸载 timeout,避免它清掉新横幅的 DOM
+        if (activeSlot && activeSlot.container === container && activeSlot.hideTimer) {
+            clearTimeout(activeSlot.hideTimer);
+        }
         // 同一 slot 重复挂载：保留最新回调
-        activeSlot = { container, onSuccess };
+        activeSlot = { container, onSuccess, hideTimer: null };
         renderBanner(container);
     };
 
     window.mtlUnmountAuthBanner = function (containerId) {
         const container = document.getElementById(containerId);
         if (!container) return;
+        // 没有横幅 + 没有待清理 timeout:什么都不做
+        if (!activeSlot || activeSlot.container !== container) {
+            const bar = container.querySelector('.mtl-auth-bar');
+            if (!bar) return;
+        }
         const bar = container.querySelector('.mtl-auth-bar');
         if (bar) {
             bar.classList.add('is-hiding');
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 container.innerHTML = '';
                 if (activeSlot && activeSlot.container === container) {
                     activeSlot = null;
                 }
             }, 220);
+            if (activeSlot && activeSlot.container === container) {
+                activeSlot.hideTimer = timer;
+            }
         } else {
             container.innerHTML = '';
             if (activeSlot && activeSlot.container === container) {
