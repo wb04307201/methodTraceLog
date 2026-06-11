@@ -22,6 +22,18 @@ import java.util.regex.Pattern;
 
 import static cn.wubo.method.trace.log.file.Constants.MESSAGE;
 
+/**
+ * 日志文件实时 tail 服务：基于 {@link WatchService} 监听日志目录，
+ * 把新追加的行通过 STOMP 推送到 {@code /topic/log-monitor}。
+ * <p>
+ * 与 {@link LogFileService} 互补：后者负责历史查询 / 过滤 / 下载，
+ * 本类只负责"最新追加的几行推给前端"。
+ * <p>
+ * 关键状态：
+ *  - {@link #filePositions}：每个已读文件的位置偏移，截断（轮转）时重置为 0
+ *  - {@link #currentMonitorFile} + {@link #monitoring}：volatile 标志位，决定是否消费 watch 事件
+ *  - 后台 {@link #executorService}：2 线程，1 个跑 watch 循环，1 个跑延迟 100ms 后的读取回调
+ */
 @Slf4j
 public class LogFileRealTimeService implements InitializingBean, DisposableBean {
 
@@ -44,6 +56,12 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
     // 监控状态
     private volatile boolean monitoring = false;
 
+    /**
+     * 构造方法。
+     *
+     * @param properties        文件相关配置（日志目录、允许扩展名、pattern）
+     * @param messagingTemplate STOMP 推送模板
+     */
     public LogFileRealTimeService(MethodTraceLogProperties.FileProperties properties, SimpMessagingTemplate messagingTemplate) {
         this.properties = properties;
         this.messagingTemplate = messagingTemplate;
@@ -228,7 +246,9 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
     /**
      * 开始监控指定的日志文件
      *
-     * @param fileName 要监控的文件名
+     * @param fileName 要监控的文件名（需通过 {@link FileUtils#pathInspection} 白名单）
+     * @return 推送回前端的状态消息，键 {@code type} / {@code fileName} / {@code message}
+     * @throws FileNotFoundException 当文件不存在或不是 regular file
      */
     public Map<String, Object> startMonitoring(String fileName) throws FileNotFoundException {
         // 安全检查：防止路径遍历攻击和非法文件名
@@ -258,6 +278,9 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
      * 1. 设置监控状态为停止
      * 2. 清空当前监控的文件引用
      * 3. 向前端发送监控停止的通知消息
+     *
+     * @param fileName 停止监控的目标文件名（实际不参与匹配，仅作为响应字段回显）
+     * @return 推送回前端的状态消息，键 {@code type} / {@code message}
      */
     public Map<String, Object> stopMonitoring(String fileName) {
         monitoring = false;

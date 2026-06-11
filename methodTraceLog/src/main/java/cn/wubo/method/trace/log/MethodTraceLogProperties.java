@@ -8,6 +8,11 @@ import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 import java.util.*;
 
+/**
+ * 顶层配置：根前缀 {@code method-trace-log}。
+ * 包含 6 个嵌套组：log / file / security / decompile / otel / propagate。
+ * 默认实例化所有非空子组，用户在 application.yml 里只覆盖需要改的字段即可。
+ */
 @Data
 @ConfigurationProperties(prefix = "method-trace-log")
 public class MethodTraceLogProperties {
@@ -44,6 +49,9 @@ public class MethodTraceLogProperties {
     @NestedConfigurationProperty
     private PropagateProperties propagate = new PropagateProperties();
 
+    /**
+     * AOP 切面与 ICallService 启用配置：总开关、采样率、trace 持久化、初始服务列表。
+     */
     @Data
     public static class LogProperties {
         private Boolean enable = true;
@@ -61,6 +69,9 @@ public class MethodTraceLogProperties {
          */
         private TraceStoreProperties traceStore = new TraceStoreProperties();
 
+        /**
+         * 单个 ICallService 的启动时 enable 配置。name 与 {@code ICallService.getCallServiceName()} 对齐。
+         */
         @Data
         @NoArgsConstructor
         @AllArgsConstructor
@@ -70,6 +81,9 @@ public class MethodTraceLogProperties {
         }
     }
 
+    /**
+     * trace 树持久化配置：in-memory（默认）/ file（落盘）/ none（不存）。
+     */
     @Data
     public static class TraceStoreProperties {
         /**
@@ -103,6 +117,9 @@ public class MethodTraceLogProperties {
         private boolean rebuildIndexOnStart = false;
     }
 
+    /**
+     * 日志文件读取配置：路径、允许扩展名、scanLines、logPattern。
+     */
     @Data
     public static class FileProperties {
 
@@ -134,6 +151,9 @@ public class MethodTraceLogProperties {
         private String logPattern = "(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+\\[([^\\]]+)\\]\\s+(\\w+)\\s+([^\\s]+)\\s*-\\s*(.*)";
     }
 
+    /**
+     * 安全相关：API Key + 浏览器 cookie 会话配置。
+     */
     @Data
     public static class SecurityProperties {
         /**
@@ -148,6 +168,9 @@ public class MethodTraceLogProperties {
         private SessionProperties session = new SessionProperties();
     }
 
+    /**
+     * 浏览器 cookie 会话配置（仅在 {@code security.api-key} 非空时使用）。
+     */
     @Data
     public static class SessionProperties {
         /**
@@ -156,6 +179,9 @@ public class MethodTraceLogProperties {
         private long ttlMillis = 8L * 60 * 60 * 1000L;
     }
 
+    /**
+     * CFR 反编译调用配置（超时、临时文件清理策略）。
+     */
     @Data
     public static class DecompileProperties {
         /**
@@ -165,6 +191,9 @@ public class MethodTraceLogProperties {
         private long timeoutSeconds = 10L;
     }
 
+    /**
+     * OpenTelemetry OTLP/HTTP 导出配置。需要 classpath 上有 {@code opentelemetry-sdk}。
+     */
     @Data
     public static class OtelProperties {
         /**
@@ -209,6 +238,9 @@ public class MethodTraceLogProperties {
         private long exportTimeoutMillis = 30000L;
     }
 
+    /**
+     * W3C traceparent 跨服务/跨线程传播配置：HTTP 入站 / RestClient 出站 / RestTemplate 拦截器。
+     */
     @Data
     public static class PropagateProperties {
         /**

@@ -48,6 +48,8 @@ public class FileTraceStore implements ITraceStore {
     private final boolean rebuildOnStart;
 
     /**
+     * 构造方法。立即创建根目录；如 {@code rebuildOnStart=true} 则同步扫描目录重建索引。
+     *
      * @param path            根目录
      * @param ttlMillis       过期时长（毫秒），clean() 释放更老文件
      * @param maxTraces       内存中保留的最近根 trace 数量（用于 getRecent / 减少磁盘读）

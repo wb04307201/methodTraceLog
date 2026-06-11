@@ -26,12 +26,18 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class MtlSessionService {
 
+    /** 浏览器 cookie 名。 */
     public static final String COOKIE_NAME = "MTRACE_SESSION";
 
     private final Map<String, Long> sessions = new ConcurrentHashMap<>();
     private final SecureRandom random = new SecureRandom();
     private final long ttlMillis;
 
+    /**
+     * 构造方法。
+     *
+     * @param ttlMillis 会话有效期（毫秒），小于等于 0 会被钳到 1ms
+     */
     public MtlSessionService(long ttlMillis) {
         // 允许任意 >0 的 TTL；设置过小仅会让 session 几乎立刻过期，不会破坏不变量。
         this.ttlMillis = Math.max(1L, ttlMillis);
@@ -45,6 +51,8 @@ public class MtlSessionService {
 
     /**
      * 创建会话，返回 sessionId。
+     *
+     * @return 32 字符十六进制的随机 sessionId（128 bit 熵）
      */
     public String create() {
         byte[] bytes = new byte[16];
@@ -60,6 +68,9 @@ public class MtlSessionService {
 
     /**
      * 验证 sessionId 是否存在且未过期。验证通过时**续期**。
+     *
+     * @param sessionId 客户端发来的 sessionId
+     * @return true 表示有效（同时会把过期时间滑动到 now+ttlMillis）
      */
     public boolean validate(String sessionId) {
         if (sessionId == null || sessionId.isEmpty()) {
@@ -81,6 +92,8 @@ public class MtlSessionService {
 
     /**
      * 主动注销。
+     *
+     * @param sessionId 要销毁的 sessionId；null 时 no-op
      */
     public void invalidate(String sessionId) {
         if (sessionId != null) {
@@ -88,6 +101,11 @@ public class MtlSessionService {
         }
     }
 
+    /**
+     * 当前内存中持有的 session 数量。
+     *
+     * @return session 条数（含已过期但尚未被清理线程回收的）
+     */
     public int size() {
         return sessions.size();
     }

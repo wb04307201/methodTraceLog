@@ -16,6 +16,12 @@ public class HeadBasedSampler implements Sampler {
 
     private final double sampleRate;
 
+    /**
+     * 构造头采样器。
+     *
+     * @param sampleRate 采样率，必须在 {@code [0.0, 1.0]} 之间（NaN 也会被拒）
+     * @throws IllegalArgumentException 超出合法区间
+     */
     public HeadBasedSampler(double sampleRate) {
         if (sampleRate < 0.0 || sampleRate > 1.0 || Double.isNaN(sampleRate)) {
             throw new IllegalArgumentException("sampleRate must be in [0.0, 1.0], got: " + sampleRate);
@@ -34,6 +40,11 @@ public class HeadBasedSampler implements Sampler {
         return ThreadLocalRandom.current().nextDouble() < sampleRate;
     }
 
+    /**
+     * 当前配置的采样率。
+     *
+     * @return 构造时传入的 {@code sampleRate}，区间 {@code [0.0, 1.0]}
+     */
     public double getSampleRate() {
         return sampleRate;
     }

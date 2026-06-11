@@ -34,6 +34,8 @@ public final class TraceContextSnapshot {
 
     /**
      * 从当前线程的 MDC 捕获一份完整快照。返回的快照与当前线程后续修改隔离。
+     *
+     * @return 当前线程 trace 上下文的不可变快照（包含 traceid/spanid/pspanid/sampled 与完整 MDC）
      */
     public static TraceContextSnapshot capture() {
         Map<String, String> mdc = MDC.getCopyOfContextMap();

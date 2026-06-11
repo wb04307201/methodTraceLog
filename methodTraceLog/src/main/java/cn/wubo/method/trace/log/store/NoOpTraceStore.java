@@ -10,6 +10,9 @@ import java.util.List;
  */
 public class NoOpTraceStore implements ITraceStore {
 
+    /**
+     * 单例：无状态实现，调用方可以直接拿这个共享实例避免重复创建。
+     */
     public static final NoOpTraceStore INSTANCE = new NoOpTraceStore();
 
     @Override

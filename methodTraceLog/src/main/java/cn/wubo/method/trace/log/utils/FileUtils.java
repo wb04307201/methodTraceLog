@@ -2,6 +2,9 @@ package cn.wubo.method.trace.log.utils;
 
 import lombok.experimental.UtilityClass;
 
+/**
+ * 文件/路径相关的工具方法。当前只暴露路径安全白名单校验。
+ */
 @UtilityClass
 public class FileUtils {
 
