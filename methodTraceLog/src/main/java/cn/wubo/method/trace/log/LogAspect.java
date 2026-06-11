@@ -12,6 +12,18 @@ import org.slf4j.MDC;
 import java.lang.reflect.Method;
 import java.util.UUID;
 
+/**
+ * AOP 切面：拦截 {@code @Component / @Service / @RestController} 注解类中的方法
+ * 以及打了 {@link AspectLog} 的方法，构造 {@link ServiceCallInfo} 事件并通过
+ * {@link CallServiceStrategy} 分发给全部 {@link ICallService} 实现。
+ * <p>
+ * 同时维护 MDC 中的 {@code traceid} / {@code spanid} / {@code pspanid} / {@code mtlSampled}，
+ * 供下游日志 logback pattern 使用 ({@code %X{traceid}}) 以及子调用继承父采样决定。
+ * <p>
+ * pointcut 中排除了框架内部类型（{@link ICallService} / {@link cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint}
+ * / {@link cn.wubo.method.trace.log.file.LogFileService} / {@link cn.wubo.method.trace.log.file.LogFileRealTimeService}），
+ * 避免追踪到自己。
+ */
 @Slf4j
 @Aspect
 public class LogAspect {
@@ -19,10 +31,13 @@ public class LogAspect {
     private final CallServiceStrategy callServiceStrategy;
     private final Sampler sampler;
 
+    /** MDC 中 trace 标识的 key，对应 W3C traceparent 中的 trace-id。 */
     public static final String LOG_TRACE_ID = "traceid";
 
+    /** MDC 中父 span 标识的 key，子调用读取用于构造 {@link ServiceCallInfo#pspanid}。 */
     public static final String LOG_PSPAN_ID = "pspanid";
 
+    /** MDC 中当前 span 标识的 key。 */
     public static final String LOG_SPAN_ID = "spanid";
 
     /**
@@ -31,10 +46,21 @@ public class LogAspect {
      */
     public static final String LOG_SAMPLED = "mtlSampled";
 
+    /**
+     * 便捷构造：使用 {@link HeadBasedSampler#HeadBasedSampler(double) 默认 100% 采样}。
+     *
+     * @param callServiceStrategy 事件分发器
+     */
     public LogAspect(CallServiceStrategy callServiceStrategy) {
         this(callServiceStrategy, new HeadBasedSampler(1.0));
     }
 
+    /**
+     * 注入自定义采样器。
+     *
+     * @param callServiceStrategy 事件分发器
+     * @param sampler             根调用采样器
+     */
     public LogAspect(CallServiceStrategy callServiceStrategy, Sampler sampler) {
         this.callServiceStrategy = callServiceStrategy;
         this.sampler = sampler;

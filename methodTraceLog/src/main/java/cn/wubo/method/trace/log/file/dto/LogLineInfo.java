@@ -23,6 +23,15 @@ public class LogLineInfo {
     private String content;
     private String originalLine;
 
+    /**
+     * 判断当前日志行是否满足请求中的过滤条件。
+     * <p>
+     * 三道闸门按顺序生效：时间范围 → 级别 → 关键字（大小写不敏感）。
+     * 任一不过都直接返回 false（短路求值）。
+     *
+     * @param request 查询条件（关键字 / 级别 / startTime / endTime）
+     * @return true 表示该行应被保留
+     */
     public boolean matchesFilter(LogQueryRequest request) {
         // 时间范围过滤
         if (!matchesTimeFilter(request)) {
@@ -81,6 +90,17 @@ public class LogLineInfo {
         return originalLine.toLowerCase().contains(keyword);
     }
 
+    /**
+     * 用配置的 pattern 解析单行日志。
+     * <p>
+     * pattern 必须有 5 个捕获组：时间戳 / 线程名 / 级别 / logger / 消息。
+     * 解析失败时返回只有 {@code originalLine} 填充的实例（其余字段 null），
+     * 让上层过滤时仍能基于原始行做关键字匹配。
+     *
+     * @param line       原始日志行
+     * @param logPattern 编译后的 pattern（来自 {@link cn.wubo.method.trace.log.MethodTraceLogProperties.FileProperties#logPattern}）
+     * @return 解析结果，匹配失败时 {@code timestamp/threadName/level/className/content} 全为 null
+     */
     public static LogLineInfo parse(String line, Pattern logPattern) {
         Matcher matcher = logPattern.matcher(line);
         if (matcher.find()) {

@@ -23,11 +23,25 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * 日志文件服务：列表 / 分页查询 / 流式下载。
+ * <p>
+ * 设计要点：
+ *  1. 用 {@link Files#lines} 流式读，避免 {@code readAllLines} 一次吃完整文件。
+ *  2. 通过 {@link MethodTraceLogProperties.FileProperties#scanLines} 限制单次扫描行数。
+ *  3. 过滤依赖 {@link LogLineInfo} 解析，pattern 在构造时编译。
+ *  4. 不做 size 预检 —— {@code Files.lines()+limit} 是懒加载，文件本身多大都支持。
+ */
 public class LogFileService {
 
     private final MethodTraceLogProperties.FileProperties properties;
     private final Pattern logPattern;
 
+    /**
+     * 构造方法。提前编译 pattern，避免每次查询都重新编译。
+     *
+     * @param properties 文件相关配置（路径、扩展名、scanLines、logPattern）
+     */
     public LogFileService(MethodTraceLogProperties.FileProperties properties) {
         this.properties = properties;
         this.logPattern = Pattern.compile(properties.getLogPattern());
@@ -75,6 +89,10 @@ public class LogFileService {
      *  1. 用 Files.lines() 流式读取，避免 readAllLines 一次载入整个文件
      *  2. 限制最大扫描行数（防止 N GB 文件扫太久，也是内存的实际安全网）
      *  3. 反向：直接在流中反向收集（reverse=true 业务场景是"看最新日志"）
+     *
+     * @param request 查询条件（文件名、关键字、级别、时间范围、分页）
+     * @return 分页结果（行列表 + 总行数 + 当前页 + 总页数 + 文件元信息）
+     * @throws IOException 读取文件失败
      */
     public LogQueryResponse queryLogs(LogQueryRequest request) throws IOException {
         String fileName = request.getFileName();
@@ -156,6 +174,10 @@ public class LogFileService {
 
     /**
      * 下载日志（流式过滤，避免一次性加载）。
+     *
+     * @param request 查询条件（文件名 + 可选过滤 + reverse），分页参数被忽略
+     * @return 过滤后的日志行列表；可被直接写入 {@code text/plain} 响应
+     * @throws IOException 读取文件失败
      */
     public List<String> downloadLog(LogQueryRequest request) throws IOException {
         File logFile = getFile(request.getFileName());

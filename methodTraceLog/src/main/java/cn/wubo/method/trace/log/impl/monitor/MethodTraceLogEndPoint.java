@@ -11,11 +11,23 @@ import org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Spring Boot Actuator 端点：暴露为 {@code /actuator/methodtrace}。
+ * <p>
+ * 读取 {@link MeterRegistry} 中名为 {@code method.execution.time} 的 Timer，
+ * 按 {@code className + "#" + methodSignature} 分组聚合 success / failure 计数
+ * 和平均耗时，给面板的"详细统计"区使用。
+ */
 @Endpoint(id = "methodtrace")
 public class MethodTraceLogEndPoint {
 
     private final MeterRegistry meterRegistry;
 
+    /**
+     * 构造方法。
+     *
+     * @param meterRegistry Micrometer 注册表（由 Spring Boot Actuator 注入）
+     */
     public MethodTraceLogEndPoint(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
     }
@@ -83,6 +95,9 @@ public class MethodTraceLogEndPoint {
     }
 
 
+    /**
+     * 单个方法（{@code className + "#" + methodSignature}）的统计聚合 DTO。
+     */
     @Data
     public class MethodStatisticsDTO {
         private String className;
@@ -95,7 +110,12 @@ public class MethodTraceLogEndPoint {
         private double averageSuccessTime;
         private double averageFailureTime;
 
-        // 构造函数
+        /**
+         * 构造方法。
+         *
+         * @param className       类全限定名
+         * @param methodSignature 方法签名（{@code MethodSignature.toLongString()}）
+         */
         public MethodStatisticsDTO(String className, String methodSignature) {
             this.className = className;
             this.methodSignature = methodSignature;

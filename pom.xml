@@ -147,6 +147,18 @@
                         </goals>
                     </execution>
                 </executions>
+                <configuration>
+                    <!--
+                        -Xdoclint:all,-missing:
+                          仍然检查 reference / syntax / html（这是真正会破坏生成 HTML 的问题），
+                          但忽略 "missing" 类的 warning（类缺 Javadoc / @param 缺描述等）。
+                          原因：项目大量使用 Lombok @Data / @UtilityClass，doclet 会把
+                          Lombok 生成的隐式 default constructor 视为"未注释"，全报 warning。
+                          改 explicit constructor 不现实（破坏 Lombok 用法），且这些 warning
+                          实际不影响 javadoc.jar 的产出。
+                    -->
+                    <doclint>all,-missing</doclint>
+                </configuration>
             </plugin>
 
             <!-- 3. GPG 签名插件 -->

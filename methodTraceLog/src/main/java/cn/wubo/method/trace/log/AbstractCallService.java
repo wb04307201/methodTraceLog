@@ -12,6 +12,15 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+/**
+ * {@link ICallService} 的抽象基类，集中放置各实现共用的字段（{@link #enable}）和
+ * 上下文净化工具 {@link #transContext(Object)}。
+ * <p>
+ * 净化逻辑见 {@link #transContext(Object)}：递归处理数组、提取异常消息、
+ * 收掉 servlet/multi-part/ResponseEntity 这类不能 JSON 序列化的对象。
+ * 子类一般只需实现 {@link #consumer(ServiceCallInfo)} + {@link #getCallServiceName()} +
+ * {@link #getCallServiceDesc()}，enable 由基类提供 getter/setter。
+ */
 public abstract class AbstractCallService implements ICallService {
 
     private Boolean enable = true;
@@ -28,7 +37,7 @@ public abstract class AbstractCallService implements ICallService {
      * 转换上下文对象为可序列化或可处理的格式
      *
      * <p>提升为 {@code public static} 工具方法，使得 {@link cn.wubo.method.trace.log.LogAspect}
-     * 在写入 {@link ServiceCallInfo#setContext(Object)} 之前就能对 args/returnValue/exception
+     * 在写入 {@link ServiceCallInfo#context} 之前就能对 args/returnValue/exception
      * 做统一净化，避免在 JSON 序列化阶段遇到已 recycle 的 servlet/multi-part 引用。
      *
      * <p>幂等：对已经转换过的值（String / List / 基本类型）再次调用不会改变内容。
@@ -84,6 +93,9 @@ public abstract class AbstractCallService implements ICallService {
 
     /**
      * 实例方法保留以兼容旧调用方。内部直接委派给静态方法。
+     *
+     * @param context 原始上下文对象，可能为null
+     * @return 转换后的对象，类型同 {@link #transContext(Object)} 的返回值
      */
     protected Object transContextInstance(Object context) {
         return transContext(context);

@@ -36,6 +36,13 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
     private final ITraceStore traceStore;
     private final long maxAgeMillis;
 
+    /**
+     * 构造方法。
+     *
+     * @param meterRegistry Micrometer 注册表（写入 Timer）
+     * @param traceStore    trace 持久化后端
+     * @param maxAgeMillis  过期阈值（毫秒），传给 {@code traceStore.clean()} 定期清理
+     */
     public SimpleMonitorServiceImpl(MeterRegistry meterRegistry, ITraceStore traceStore, long maxAgeMillis) {
         this.meterRegistry = meterRegistry;
         this.traceStore = traceStore;
@@ -133,10 +140,21 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
         return "监控指标";
     }
 
+    /**
+     * 通过 traceStore 按 traceId 查根节点。
+     *
+     * @param id traceId
+     * @return 根节点；找不到返回 null
+     */
     public MethodTraceInfo getByTraceId(String id) {
         return traceStore.getByTraceId(id);
     }
 
+    /**
+     * 全部根 trace（不过滤，limit=1000）。供"最近 8 小时"等面板用。
+     *
+     * @return 根 trace 列表，按完成时间倒序
+     */
     public List<MethodTraceInfo> getMethodTraceInfos() {
         return getMethodTraceInfos(null, null, false, 1000);
     }
@@ -148,6 +166,7 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
      * @param methodNamePattern 方法名 substring 匹配（不区分大小写），null 不过滤
      * @param onlyErrors        true 时只保留 AFTER_THROW 的根 trace
      * @param limit             最多返回多少条
+     * @return 过滤后的根 trace 列表，按 store 返回顺序截断到 {@code limit}
      */
     public List<MethodTraceInfo> getMethodTraceInfos(String classNamePattern, String methodNamePattern, boolean onlyErrors, int limit) {
         List<MethodTraceInfo> all = traceStore.getRecent(onlyErrors ? 5000 : 2000);

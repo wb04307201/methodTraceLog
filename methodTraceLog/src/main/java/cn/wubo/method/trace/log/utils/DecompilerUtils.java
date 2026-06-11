@@ -17,6 +17,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
+/**
+ * CFR 反编译工具：把 classpath 上的任意类按方法反编译为可读 Java 源码。
+ * <p>
+ * 关键点：
+ *  1. 走 classloader 的 {@code getResourceAsStream}，天然支持 file / thin jar / fat-jar 嵌套。
+ *  2. 写临时文件 + CFR daemon 线程 + future timeout —— 病态输入会被取消，临时文件总是清理。
+ *  3. 50MB 字节上限保护 tmp 分区不被病态类撑爆。
+ *  4. {@link #removeAnnotations(String)} 配套提供去注解，便于把代码喂给 LLM。
+ */
 @UtilityClass
 @Slf4j
 public class DecompilerUtils {
@@ -43,10 +52,29 @@ public class DecompilerUtils {
         return t;
     });
 
+    /**
+     * 反编译指定类的指定方法，使用默认超时（{@value #DEFAULT_TIMEOUT_SECONDS} 秒）。
+     *
+     * @param className  类全限定名
+     * @param methodName 方法名（{@code --methodname}）
+     * @return 反编译得到的 Java 源码（含原注解）
+     * @throws IllegalArgumentException 类找不到 / 类字节不存在 / 超出 50MB
+     * @throws IllegalStateException    反编译超时、被中断或 CFR 内部异常
+     */
     public String decompile(String className, String methodName) {
         return decompile(className, methodName, DEFAULT_TIMEOUT_SECONDS);
     }
 
+    /**
+     * 反编译指定类的指定方法，自定义超时。
+     *
+     * @param className      类全限定名
+     * @param methodName     方法名（{@code --methodname}）
+     * @param timeoutSeconds 超时秒数；到达后 future 会被取消并抛 {@link IllegalStateException}
+     * @return 反编译得到的 Java 源码（含原注解）
+     * @throws IllegalArgumentException 类找不到 / 类字节不存在 / 超出 50MB
+     * @throws IllegalStateException    反编译超时、被中断或 CFR 内部异常
+     */
     public String decompile(String className, String methodName, long timeoutSeconds) {
         // 1. 解析类（不触发 static init），用 context classloader 兼容 Spring Boot devtools 等场景
         Class<?> clazz;
@@ -185,6 +213,9 @@ public class DecompilerUtils {
      *  1. 带括号的多行注解（@Foo(arg)）
      *  2. 单行注解（@Bar）
      * 同时折叠多余空行和行首空白。
+     *
+     * @param code 原始 Java 源码（可含注解），允许 null / 空串
+     * @return 去注解 + 折叠空行 + 去行首空白 后的源码
      */
     public String removeAnnotations(String code) {
         if (code == null || code.isEmpty()) {

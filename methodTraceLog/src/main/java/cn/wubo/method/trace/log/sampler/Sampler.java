@@ -11,6 +11,8 @@ public interface Sampler {
     /**
      * 是否对一个全新（无父上下文）的根调用进行采样。
      * 子调用不应调用此方法 —— 子调用从 MDC 继承父决定。
+     *
+     * @return true 开始采样（写入 trace 树 / Micrometer）、false 跳过
      */
     boolean shouldStartRoot();
 }
