@@ -44,11 +44,45 @@
         if (location.hash !== '#' + name) {
             history.replaceState(null, '', '#' + name);
         }
+        // 滑动指示器:等浏览器完成布局(0 双 RAF)再量,避免初次 hidden→visible 时取到 0 尺寸
+        requestAnimationFrame(() => requestAnimationFrame(positionTabIndicator));
+        // stagger 进入:每个 panel 进入时让直接子元素依次淡入
+        document.querySelectorAll('.mtl-tab-panel').forEach(el => {
+            if (el.dataset.tab === name) {
+                el.classList.remove('mtl-stagger-on');
+                // 强制 reflow 后重加,保证动画重放
+                void el.offsetWidth;
+                el.classList.add('mtl-stagger-on');
+            } else {
+                el.classList.remove('mtl-stagger-on');
+            }
+        });
         if (tabModules[name] && tabModules[name].onShow) {
             if (!opts || !opts.skipOnShow) {
                 try { tabModules[name].onShow(); } catch (e) { console.error(e); }
             }
         }
+    }
+
+    // ============== 顶栏 tab 滑动指示器 ==============
+    // 位置 + 宽度根据当前 active tab 实时算出,放到 .mtl-tab-indicator 上
+    // 初始 .mtl-tab-indicator width=0 + opacity=0,首次定位后由 [data-has-active=true] 渐显
+    function positionTabIndicator() {
+        const tabsEl = document.getElementById('mtlTabs');
+        const indicator = document.getElementById('mtlTabIndicator');
+        if (!tabsEl || !indicator) return;
+        const active = tabsEl.querySelector('.mtl-tab.active');
+        if (!active) { tabsEl.removeAttribute('data-has-active'); return; }
+        const tabRect = active.getBoundingClientRect();
+        const tabsRect = tabsEl.getBoundingClientRect();
+        // 容器有 padding 时,bRect 含 padding,需减掉
+        const cs = getComputedStyle(tabsEl);
+        const padL = parseFloat(cs.paddingLeft) || 0;
+        const padT = parseFloat(cs.paddingTop) || 0;
+        indicator.style.left = (tabRect.left - tabsRect.left - tabsEl.scrollLeft + padL) + 'px';
+        indicator.style.width = tabRect.width + 'px';
+        indicator.style.bottom = (tabsRect.height - tabRect.bottom + tabsRect.top - padT) + 'px';
+        tabsEl.setAttribute('data-has-active', 'true');
     }
 
     function mtlToast(message) {
@@ -72,7 +106,7 @@
         }
         return modalEl;
     }
-    function mtlOpenModal() { ensureModal().style.display = 'block'; }
+    function mtlOpenModal() { ensureModal().style.display = 'flex'; }
     function mtlCloseModal() { const m = ensureModal(); if (m) m.style.display = 'none'; }
 
     function mtlFormatFileSize(bytes) {
@@ -111,6 +145,42 @@
                 '<div class="empty-state__title">' + mtlEscapeHtml(title) + '</div>' +
                 (hint ? '<div class="empty-state__hint">' + mtlEscapeHtml(hint) + '</div>' : '') +
             '</div>';
+    }
+
+    // ============== 数字计数动画 ==============
+    // 用法:MTL.countUp(el, target, { duration, decimals, prefix, suffix, onStart, onDone })
+    //   target: 数字 / 含前缀后缀的字符串("98.5%")/ null 走 toLocaleString
+    //   duration: ms,默认 700
+    //   decimals: 固定小数位,默认按 target 自动判(0.x 留 2 位,整数留 0)
+    //   onStart(el): 触发 .mtl-counting 让数字变暗,onDone(el) 移除
+    // 设计:rAF + easeOutCubic,中途中断(连续 refresh)就 cancel 上一帧
+    function mtlCountUp(target, opts) {
+        const o = opts || {};
+        const el = (typeof target === 'string') ? document.getElementById(target) : target;
+        if (!el) return;
+        const to = o.to;
+        if (to == null || isNaN(to)) { el.textContent = (o.fallback != null) ? o.fallback : '0'; return; }
+        const duration = o.duration || 700;
+        const decimals = (o.decimals != null) ? o.decimals : ((to % 1 !== 0) ? 2 : 0);
+        const prefix = o.prefix || '';
+        const suffix = o.suffix || '';
+        const useGrouping = o.grouping !== false;  // 默认加千分位
+        const from = 0;
+        if (o.onStart) o.onStart(el);
+        const start = performance.now();
+        let cancelled = false;
+        el._mtlCountCancel = () => { cancelled = true; };
+        const ease = t => 1 - Math.pow(1 - t, 3);  // easeOutCubic
+        const fmt = v => prefix + v.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping }) + suffix;
+        function frame(now) {
+            if (cancelled) return;
+            const t = Math.min(1, (now - start) / duration);
+            const val = from + (to - from) * ease(t);
+            el.textContent = fmt(val);
+            if (t < 1) requestAnimationFrame(frame);
+            else { el._mtlCountCancel = null; if (o.onDone) o.onDone(el); }
+        }
+        requestAnimationFrame(frame);
     }
 
     function onHashChange() {
@@ -214,8 +284,17 @@
         window.addEventListener('mtlAuthLoggedOut', onLoggedOut);
 
         // 1) 立即渲染 tab 骨架(不调 onShow,等鉴权决定)
-        showTab('overview', { skipOnShow: true });
+        //    初始 tab 优先看 URL hash,这样深链 panel#traces 能直接落到对应 tab。
+        //    之前硬编码 'overview' 会被 showTab 里的 replaceState 反向冲掉 hash,
+        //    而且 replaceState 不触发 hashchange,所以深链完全失效。
+        const initialTab = (location.hash || '').replace('#', '');
+        showTab(TABS.includes(initialTab) ? initialTab : 'overview', { skipOnShow: true });
+        // webfont 加载完会改变字宽 → 重定位指示器
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(() => positionTabIndicator());
+        }
         window.addEventListener('hashchange', onHashChange);
+        window.addEventListener('resize', () => requestAnimationFrame(positionTabIndicator));
 
         // 2) 检查登录态,决定挂横幅 / 拉数据 / 显示登出按钮
         if (window.mtlCheckAuth) {
@@ -246,6 +325,7 @@
         formatDate: mtlFormatDate,
         formatDateTime: mtlFormatDateTime,
         escapeHtml: mtlEscapeHtml,
-        renderEmpty: mtlRenderEmpty
+        renderEmpty: mtlRenderEmpty,
+        countUp: mtlCountUp
     };
 })();

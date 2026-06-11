@@ -34,10 +34,15 @@
     function updateSummary(data) {
         let totalCount = 0, successCount = 0;
         data.forEach(item => { totalCount += item.totalCalls; successCount += item.successCalls; });
-        const avgSuccessRate = totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(2) : 0;
-        document.getElementById('totalCount').textContent = totalCount.toLocaleString();
-        document.getElementById('successCount').textContent = successCount.toLocaleString();
-        document.getElementById('avgSuccessRate').textContent = avgSuccessRate + '%';
+        const avgSuccessRate = totalCount > 0 ? ((successCount / totalCount) * 100) : 0;
+        // 中断上一轮正在滚的数字,避免快速 auto-refresh 时数字来回跳
+        const cancelPrev = el => { if (el && el._mtlCountCancel) el._mtlCountCancel(); };
+        cancelPrev(document.getElementById('totalCount'));
+        cancelPrev(document.getElementById('successCount'));
+        cancelPrev(document.getElementById('avgSuccessRate'));
+        MTL.countUp('totalCount',    { to: totalCount,     duration: 700, onStart: el => el.classList.add('mtl-counting'), onDone: el => el.classList.remove('mtl-counting') });
+        MTL.countUp('successCount',  { to: successCount,   duration: 700, onStart: el => el.classList.add('mtl-counting'), onDone: el => el.classList.remove('mtl-counting') });
+        MTL.countUp('avgSuccessRate',{ to: avgSuccessRate, duration: 700, decimals: 2, suffix: '%', onStart: el => el.classList.add('mtl-counting'), onDone: el => el.classList.remove('mtl-counting') });
     }
 
     function updateTable(data) {

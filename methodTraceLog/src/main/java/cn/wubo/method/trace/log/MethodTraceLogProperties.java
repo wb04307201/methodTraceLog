@@ -119,14 +119,14 @@ public class MethodTraceLogProperties {
         private List<String> allowedExtensions = Arrays.asList(".log", ".txt", ".out");
 
         /**
-         * 单次查询最大行数（同时也是 query 路径下流式扫描的最大行数）
+         * 流式扫描的最大行数上限。这是真正决定单次查询内存/耗时上限的配置。
+         * 与分页 pageSize 是两回事:scanLines 决定最多扫多少行,pageSize 决定返回多少行。
+         * Files.lines() + limit() 是懒加载,文件本身多大都行。
+         * <p>
+         * 默认 10000:1~2MB 内存,中等生产服务(10KB/s 日志量)能覆盖 1~2 小时窗口,
+         * 单次查询仍 < 100ms。生产大流量可调到 50000~100000,资源足够。
          */
-        private int maxLines = 1000;
-
-        /**
-         * 文件最大大小（MB）
-         */
-        private long maxFileSize = 100;
+        private int scanLines = 10000;
 
         /**
          * 日志文件匹配模式

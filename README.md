@@ -81,14 +81,14 @@ method-trace-log:
     trace-store:                                  # where the in-memory tree lives
       type: in-memory                             # in-memory | file | none
       path: ./trace-store                         # only when type=file (auto-creates yyyy-MM-dd subdirs)
-      ttl-millis: 28800000                        # 8h
-      max-traces: 10000                           # recent map cap
+      max-traces: 1000                            # recent map cap (in-memory & file memory cache)
+      ttl-millis: 28800000                        # 8h; clean() drops disk files older than this
+      rebuild-index-on-start: false               # type=file only; rebuilds traceId→file index at startup (slows boot on large dirs)
   file:
     enable: true
     path: ./logs
     allowed-extensions: [.log, .txt, .out]
-    max-lines: 1000
-    max-file-size: 100                            # MB
+    scan-lines: 10000                             # stream-scan line cap; Files.lines() + limit() is lazy, so the file itself can be arbitrarily large — no size check
     # log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
   security:
     api-key: change-me-in-production              # empty = no auth
@@ -100,6 +100,11 @@ method-trace-log:
     enable: false
     endpoint: http://localhost:4318/v1/traces
     service-name: method-trace-log
+    service-namespace: ""                        # Resource service.namespace label
+    export-delay-millis: 5000                    # OTLP client built-in batching delay
+    max-queue-size: 2048
+    max-export-batch-size: 512
+    export-timeout-millis: 30000
   propagate:                                      # W3C traceparent propagation
     http-inbound: true                            # TraceContextFilter reads traceparent
     rest-client-outbound: true                    # RestClient.Builder interceptor
@@ -225,6 +230,21 @@ Launch the released jar with stdio transport, configured in your AI client (Clau
 ```bash
 java -jar methodTraceLog-mcp-1.0.20.jar
 ```
+
+MCP server config block (`mcpServers`) for AI clients like Claude Desktop, Cursor, Cline:
+
+```json
+{
+  "mcpServers": {
+    "methodTraceLog-mcp": {
+      "command": "java",
+      "args": ["-jar", "methodTraceLog-mcp-1.0.20.jar"]
+    }
+  }
+}
+```
+
+> Note: unlike `sql-forge-mcp` which passes hosts as CLI args (`--hosts[0].name=...`), methodTraceLog-mcp reads hosts from the `application.yml` packed inside the jar (see YAML block above). The JSON block only tells the AI client *how* to launch the process; the host list still lives in YAML.
 
 **13 tools exposed:** `getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`.
 

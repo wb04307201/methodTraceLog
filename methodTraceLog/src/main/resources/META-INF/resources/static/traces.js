@@ -81,6 +81,12 @@
             const el = document.getElementById(id);
             if (el && !el._mtlBound) { el.addEventListener(evt, fn); el._mtlBound = true; }
         });
+        // 首次进入自动查一次(同样的数据源,只是这里能过滤 / 改 limit / 导出)。
+        // 后续切回 tab 复用上一次的查询结果,不重发请求(用户已经调过的过滤条件不丢)。
+        if (!window._mtlTracesFirstShown) {
+            window._mtlTracesFirstShown = true;
+            query();
+        }
     }
     function onHide() { /* no auto-refresh on this tab */ }
 

@@ -5,6 +5,7 @@ import cn.wubo.method.trace.log.file.LogFileRealTimeService;
 import cn.wubo.method.trace.log.file.LogFileService;
 import cn.wubo.method.trace.log.file.dto.LogQueryRequest;
 import cn.wubo.method.trace.log.utils.ValidationUtils;
+import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -81,21 +82,37 @@ public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
         RouterFunctions.Builder builder = RouterFunctions.route();
         builder.GET("/methodTraceLog/logFile/files", accept(MediaType.APPLICATION_JSON), request -> ServerResponse.ok().body(fileService.getLogFiles()));
         builder.POST("/methodTraceLog/logFile/query", accept(MediaType.APPLICATION_JSON), request -> {
-            LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
-            ValidationUtils.validate(validator, logQueryRequest);
-            return ServerResponse.ok().body(fileService.queryLogs(logQueryRequest));
+            try {
+                LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
+                ValidationUtils.validate(validator, logQueryRequest);
+                return ServerResponse.ok().body(fileService.queryLogs(logQueryRequest));
+            } catch (ConstraintViolationException e) {
+                // 字段校验失败(fileName 为空等)→ 400 + 真实原因
+                return ServerResponse.badRequest().body(Map.of(ERROR, "validation_failed", MESSAGE, e.getMessage()));
+            } catch (IllegalArgumentException e) {
+                // 文件不存在 / 路径非法 / 扩展名不允许 → 400 + 真实原因
+                return ServerResponse.badRequest().body(Map.of(ERROR, "bad_request", MESSAGE, e.getMessage()));
+            } catch (Exception e) {
+                return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(ERROR, "internal_error", MESSAGE, e.getMessage()));
+            }
         });
         builder.POST("/methodTraceLog/logFile/download", request -> {
-            LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
-            ValidationUtils.validate(validator, logQueryRequest);
-            return ServerResponse.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header("Content-Disposition", "attachment;filename=" +  URLEncoder.encode(logQueryRequest.getFileName(), StandardCharsets.UTF_8)).build((req, res) -> {
-                try (PrintWriter writer = res.getWriter()) {
-                    for (String line : fileService.downloadLog(logQueryRequest)) {
-                        writer.println(line);
+            try {
+                LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
+                ValidationUtils.validate(validator, logQueryRequest);
+                return ServerResponse.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header("Content-Disposition", "attachment;filename=" +  URLEncoder.encode(logQueryRequest.getFileName(), StandardCharsets.UTF_8)).build((req, res) -> {
+                    try (PrintWriter writer = res.getWriter()) {
+                        for (String line : fileService.downloadLog(logQueryRequest)) {
+                            writer.println(line);
+                        }
                     }
-                }
-                return null;
-            });
+                    return null;
+                });
+            } catch (ConstraintViolationException e) {
+                return ServerResponse.badRequest().body(Map.of(ERROR, "validation_failed", MESSAGE, e.getMessage()));
+            } catch (IllegalArgumentException e) {
+                return ServerResponse.badRequest().body(Map.of(ERROR, "bad_request", MESSAGE, e.getMessage()));
+            }
         });
         // REST 端点：start/stop/status。和现有 STOMP /app/start-monitor 等并存，互不干扰。
         builder.GET("/methodTraceLog/logFile/monitor/start", request -> {

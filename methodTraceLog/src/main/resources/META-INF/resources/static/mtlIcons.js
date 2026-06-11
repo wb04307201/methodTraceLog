@@ -37,7 +37,14 @@
         'trash':         '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
         'inbox':         '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
         'search-x':      '<path d="m13.5 8.5-5 5"/><path d="m8.5 8.5 5 5"/><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
-        'file-x':        '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="9.5" y1="12.5" x2="14.5" y2="17.5"/><line x1="14.5" y1="12.5" x2="9.5" y2="17.5"/>'
+        'file-x':        '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="9.5" y1="12.5" x2="14.5" y2="17.5"/><line x1="14.5" y1="12.5" x2="9.5" y2="17.5"/>',
+        'copy':          '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+        'check-check':   '<polyline points="2 12 7 17 12 12"/><polyline points="17 8 22 12 17 16"/>',
+        'trending-up':   '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+        'trending-down': '<polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>',
+        'activity':      '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+        'hash':          '<line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/>',
+        'pulse':         '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'
     };
 
     /**
@@ -61,8 +68,10 @@
      * @param {string} [className] - 包裹 span 的额外 class
      */
     function mtlIconHTML(name, text, className) {
+        // data-icon 套在内层只包 SVG 的 span 上,让 [data-icon] svg { width:1em; height:1em } 约束尺寸
+        // 但不能放外层 wrapper 上,否则 width:1em 限制会把文字挤到第二行
         const cls = className ? ' class="' + className + '"' : '';
-        return '<span' + cls + '>' + mtlIcon(name) + '<span class="mtl-icon-text">' + (text == null ? '' : text) + '</span></span>';
+        return '<span' + cls + '><span data-icon="' + name + '">' + mtlIcon(name) + '</span><span class="mtl-icon-text">' + (text == null ? '' : text) + '</span></span>';
     }
 
     /**

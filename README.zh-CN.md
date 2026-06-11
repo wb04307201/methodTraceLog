@@ -81,14 +81,14 @@ method-trace-log:
     trace-store:                                  # 内存 trace 树持久化
       type: in-memory                             # in-memory | file | none
       path: ./trace-store                         # 仅 type=file 时生效（自动按 yyyy-MM-dd 建子目录）
-      ttl-millis: 28800000                        # 8 小时
-      max-traces: 10000                           # recent map 上限
+      max-traces: 1000                            # recent map 上限（in-memory / file 的内存缓存共用）
+      ttl-millis: 28800000                        # 8h，clean() 会删超过此时长的磁盘文件
+      rebuild-index-on-start: false               # 仅 type=file 时生效；启动时扫描目录重建 traceId→file 索引，文件量大时拖慢启动
   file:
     enable: true
     path: ./logs
     allowed-extensions: [.log, .txt, .out]
-    max-lines: 1000
-    max-file-size: 100                            # MB
+    scan-lines: 10000                             # 流式扫描行数上限；Files.lines() + limit() 是懒加载，文件本身多大都无所谓，没有 size check
     # log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
   security:
     api-key: change-me-in-production              # 留空 = 关闭鉴权
@@ -100,6 +100,11 @@ method-trace-log:
     enable: false
     endpoint: http://localhost:4318/v1/traces
     service-name: method-trace-log
+    service-namespace: ""                        # Resource service.namespace 标签
+    export-delay-millis: 5000                    # OTLP 客户端内置 batching 延迟
+    max-queue-size: 2048
+    max-export-batch-size: 512
+    export-timeout-millis: 30000
   propagate:                                      # W3C traceparent 传播
     http-inbound: true                            # TraceContextFilter 读 traceparent
     rest-client-outbound: true                    # RestClient.Builder 拦截器
@@ -225,6 +230,21 @@ stdjar 方式启动（由 AI 客户端拉起）：
 ```bash
 java -jar methodTraceLog-mcp-1.0.20.jar
 ```
+
+Claude Desktop / Cursor / Cline 等 AI 客户端的 MCP server 配置（`mcpServers` JSON 块）：
+
+```json
+{
+  "mcpServers": {
+    "methodTraceLog-mcp": {
+      "command": "java",
+      "args": ["-jar", "methodTraceLog-mcp-1.0.20.jar"]
+    }
+  }
+}
+```
+
+> 注意：和 `sql-forge-mcp` 这类把 hosts 当 CLI 参数（`--hosts[0].name=...`）传的方式不同，methodTraceLog-mcp 的 hosts 走的是 jar 自身打包的 `application.yml`（见上面 YAML 块）。JSON 块只负责「用啥命令拉起这个进程」，目标主机列表还在 YAML 里。
 
 **13 个工具**：`getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`。
 

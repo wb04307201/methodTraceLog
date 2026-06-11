@@ -4,16 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>方法观测日志 - 控制台</title>
-    <link rel="stylesheet" type="text/css" href="/static/panel.css"/>
-    <script src="/static/sockjs-client/1.6.1/sockjs.min.js"></script>
-    <script src="/static/stompjs/7.1.1/stomp.umd.min.js"></script>
-    <script src="/static/mtlIcons.js"></script>
-    <script src="/static/mtlAuth.js"></script>
-    <script src="/static/panel.js"></script>
-    <script src="/static/overview.js"></script>
-    <script src="/static/traces.js"></script>
-    <script src="/static/logs.js"></script>
-    <script src="/static/decompile.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+    <!-- 静态资源 ?v=YYYYMMDD 缓存破坏:每次改 panel.css / *.js 务必把 ?v= 后面的日期 +1,
+         否则浏览器会继续用缓存里的旧资源(模态框不居中 / 表格不刷新 等诡异问题)。 -->
+    <link rel="stylesheet" type="text/css" href="/static/panel.css?v=20260613"/>
+    <script src="/static/sockjs-client/1.6.1/sockjs.min.js?v=20260613"></script>
+    <script src="/static/stompjs/7.1.1/stomp.umd.min.js?v=20260613"></script>
+    <script src="/static/mtlIcons.js?v=20260613"></script>
+    <script src="/static/mtlAuth.js?v=20260613"></script>
+    <script src="/static/panel.js?v=20260613"></script>
+    <script src="/static/overview.js?v=20260613"></script>
+    <script src="/static/traces.js?v=20260613"></script>
+    <script src="/static/logs.js?v=20260613"></script>
+    <script src="/static/decompile.js?v=20260613"></script>
 </head>
 <body>
     <header class="mtl-topbar">
@@ -21,6 +26,7 @@
             <span class="mtl-title"><span data-icon="chart-bar"></span><span>方法观测日志</span></span>
         </div>
         <nav class="mtl-tabs" id="mtlTabs">
+            <span class="mtl-tab-indicator" id="mtlTabIndicator" aria-hidden="true"></span>
             <a class="mtl-tab" href="#overview" data-tab="overview">概览</a>
             <a class="mtl-tab" href="#traces"   data-tab="traces">调用记录</a>
             <a class="mtl-tab" href="#logs"     data-tab="logs">日志文件</a>
@@ -241,8 +247,19 @@
                     <button class="btn" id="decClearBtn">清空</button>
                 </div>
             </div>
-            <div class="area-panel">
-                <pre id="decResult" class="decompile-output">// 结果会显示在这里</pre>
+            <div class="area-panel decompile-panel">
+                <div class="decompile-toolbar">
+                    <span class="decompile-toolbar__label">
+                        <span data-icon="file-x"></span><span id="decMeta">等待结果</span>
+                    </span>
+                    <div class="decompile-toolbar__actions">
+                        <button class="btn" id="decCopyBtn" disabled><span data-icon="copy"></span><span class="mtl-icon-text">复制</span></button>
+                    </div>
+                </div>
+                <div class="decompile-body">
+                    <pre class="decompile-linenums" id="decLinenums" aria-hidden="true"></pre>
+                    <pre id="decResult" class="decompile-output">// 结果会显示在这里</pre>
+                </div>
             </div>
         </section>
     </main>

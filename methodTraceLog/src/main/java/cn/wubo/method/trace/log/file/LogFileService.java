@@ -73,7 +73,7 @@ public class LogFileService {
      * <p>
      * 实现要点：
      *  1. 用 Files.lines() 流式读取，避免 readAllLines 一次载入整个文件
-     *  2. 限制最大扫描行数（防止 N MB 文件把内存打爆）
+     *  2. 限制最大扫描行数（防止 N GB 文件扫太久，也是内存的实际安全网）
      *  3. 反向：直接在流中反向收集（reverse=true 业务场景是"看最新日志"）
      */
     public LogQueryResponse queryLogs(LogQueryRequest request) throws IOException {
@@ -81,7 +81,7 @@ public class LogFileService {
 
         File logFile = getFile(fileName);
 
-        int maxScanLines = Math.max(properties.getMaxLines(), 1000);
+        int maxScanLines = Math.max(properties.getScanLines(), 1000);
         List<String> filteredLines;
         try (Stream<String> stream = Files.lines(logFile.toPath(), StandardCharsets.UTF_8)) {
             Stream<String> limited = stream.limit(maxScanLines);
@@ -139,19 +139,17 @@ public class LogFileService {
         File logFile = new File(properties.getLogPath(), fileName);
 
         if (!logFile.exists()) {
-            throw new IllegalArgumentException("File does not exist");
+            throw new IllegalArgumentException("File does not exist: " + fileName);
         }
         if (!logFile.isFile()) {
-            throw new IllegalArgumentException("Not a valid file");
+            throw new IllegalArgumentException("Not a valid file: " + fileName);
         }
         if (!isValidFileExtensions(logFile)) {
-            throw new IllegalArgumentException("Unsupported file type");
+            throw new IllegalArgumentException("Unsupported file type: " + fileName);
         }
 
-        long fileSizeMB = logFile.length() / (1024 * 1024);
-        if (fileSizeMB > properties.getMaxFileSize()) {
-            throw new IllegalArgumentException(String.format("File too large, exceeds limit of %dMB", properties.getMaxFileSize()));
-        }
+        // 注意:这里不做 size 校验。Files.lines() + limit(scanLines) 是流式懒加载,
+        // 真实内存占用只跟 scanLines 有关、跟文件大小无关,大日志文件能正常查询。
 
         return logFile;
     }
@@ -161,7 +159,7 @@ public class LogFileService {
      */
     public List<String> downloadLog(LogQueryRequest request) throws IOException {
         File logFile = getFile(request.getFileName());
-        int maxScanLines = Math.max(properties.getMaxLines(), 1000);
+        int maxScanLines = Math.max(properties.getScanLines(), 1000);
         try (Stream<String> stream = Files.lines(logFile.toPath(), StandardCharsets.UTF_8)) {
             Stream<String> limited = stream.limit(maxScanLines);
             List<String> result = filterLines(limited, request);

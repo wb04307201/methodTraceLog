@@ -64,8 +64,24 @@
         logsSearchLogs();
     }
 
+    // 把 fetch 错误转成可读 message:4xx/5xx 优先用后端 JSON.message,降级用 HTTP 状态
+    async function parseError(r, fallback) {
+        let body = '';
+        try { body = await r.text(); } catch (_) { /* ignore */ }
+        let msg = fallback;
+        if (body) {
+            try {
+                const j = JSON.parse(body);
+                if (j && j.message) msg = j.message;
+            } catch (_) {
+                if (body.length < 200) msg = body;
+            }
+        }
+        return new Error('HTTP ' + r.status + ': ' + msg);
+    }
+
     // ===== 搜索 =====
-    function logsSearchLogs(page = 1) {
+    async function logsSearchLogs(page = 1) {
         if (!currentFile) { alert('请先选择日志文件'); return; }
         currentQuery.page = page;
         currentQuery.pageSize = parseInt(document.getElementById('pageSize').value);
@@ -77,20 +93,25 @@
         currentQuery.startTime = st ? st + ':00' : null;
         currentQuery.endTime   = et ? et + ':00' : null;
 
-        document.getElementById('logContent').innerHTML = '<div class="loading">正在搜索日志...</div>';
+        const contentEl = document.getElementById('logContent');
+        contentEl.innerHTML = '<div class="loading">正在搜索日志...</div>';
         document.getElementById('resultPanel').classList.remove('hidden');
 
-        mtlFetch('/methodTraceLog/logFile/query', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(currentQuery)
-        })
-            .then(r => { if (!r.ok) throw new Error('搜索失败'); return r.json(); })
-            .then(displayResults)
-            .catch(e => {
-                console.error(e);
-                document.getElementById('logContent').innerHTML = '<div class="error">搜索日志失败</div>';
+        try {
+            const r = await mtlFetch('/methodTraceLog/logFile/query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentQuery)
             });
+            if (!r.ok) throw await parseError(r, '搜索失败');
+            const data = await r.json();
+            displayResults(data);
+        } catch (e) {
+            console.error('[logs]', e);
+            // 真实原因给用户看到,而不是一句"搜索日志失败"
+            contentEl.innerHTML = '<div class="error"><div class="error__title">搜索失败</div><div class="error__detail">' + MTL.escapeHtml(e.message || String(e)) + '</div></div>';
+            MTL.toast && MTL.toast('搜索失败: ' + (e.message || '未知错误'));
+        }
     }
 
     function logsResetLogs() {
