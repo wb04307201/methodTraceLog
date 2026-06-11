@@ -38,7 +38,7 @@
 
 ```xml
 <dependency>
-    <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
+    <groupId>io.github.wb04307201</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
     <version>1.0.20</version>
 </dependency>
@@ -209,42 +209,24 @@ public class MyService extends AbstractCallService {
 
 独立 Spring Boot 进程，stdio 通信，把 `@Tool` 调用通过 HTTP 转发到一个或多个目标主机（每个目标 = 部署了 starter 的应用）。
 
-```xml
-<dependency>
-    <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
-    <artifactId>methodTraceLog-mcp</artifactId>
-    <version>1.0.20</version>
-</dependency>
-```
-
-```yaml
-method-trace-log:
-  mcp:
-    hosts:
-      - { name: local-dev, url: http://localhost:8080, description: 本地开发, api-key: change-me-in-production }
-      - { name: staging,   url: https://staging.example.com, description: 预发, api-key: ${STAGING_API_KEY} }
-```
-
-stdjar 方式启动（由 AI 客户端拉起）：
-
-```bash
-java -jar methodTraceLog-mcp-1.0.20.jar
-```
-
 Claude Desktop / Cursor / Cline 等 AI 客户端的 MCP server 配置（`mcpServers` JSON 块）：
 
 ```json
 {
   "mcpServers": {
     "methodTraceLog-mcp": {
-      "command": "java",
-      "args": ["-jar", "methodTraceLog-mcp-1.0.20.jar"]
+      "command": "jbang.cmd",
+      "args": [
+        "io.github.wb04307201:methodTraceLog-mcp:1.0.20",
+        "--method-trace-log.mcp.hosts[0].name=local-dev",
+        "--method-trace-log.mcp.hosts[0].url=http://localhost:8080",
+        "--method-trace-log.mcp.hosts[0].description=本地开发",
+        "--method-trace-log.mcp.hosts[0].api-key=change-me-in-production"
+      ]
     }
   }
 }
 ```
-
-> 注意：和 `sql-forge-mcp` 这类把 hosts 当 CLI 参数（`--hosts[0].name=...`）传的方式不同，methodTraceLog-mcp 的 hosts 走的是 jar 自身打包的 `application.yml`（见上面 YAML 块）。JSON 块只负责「用啥命令拉起这个进程」，目标主机列表还在 YAML 里。
 
 **13 个工具**：`getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`。
 

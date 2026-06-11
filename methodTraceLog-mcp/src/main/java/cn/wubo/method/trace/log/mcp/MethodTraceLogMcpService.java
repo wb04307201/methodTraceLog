@@ -18,19 +18,19 @@ import java.util.Optional;
  * <p>
  * 工具列表：
  * <ol>
- *   <li>{@link #getHosts()} 列出全部已配置的主机</li>
- *   <li>{@link #getCallServices(String)} 列出方法追踪日志输出服务</li>
- *   <li>{@link #setCallServiceEnable(String, String, boolean)} 启用/停用某个日志服务</li>
- *   <li>{@link #getMethodTraceList(String)} 获取最近的方法调用追踪列表</li>
- *   <li>{@link #getMethodTraceByTraceId(String, String)} 根据 traceId 拉取完整调用链</li>
- *   <li>{@link #decompileMethod(String, String, String, Long)} 反编译指定类的指定方法</li>
- *   <li>{@link #getLogFiles(String)} 列出日志目录下的文件</li>
- *   <li>{@link #queryLogContent(String, String, String, String, String, Integer, String)} 按条件查询日志行</li>
- *   <li>{@link #downloadLog(String, String, String, String, String, String)} 下载日志内容</li>
- *   <li>{@link #startMonitor(String, String)} 启动文件实时监控（tail）</li>
- *   <li>{@link #stopMonitor(String, String)} 停止文件实时监控</li>
- *   <li>{@link #getMonitorStatus(String)} 查看监控状态</li>
- *   <li>{@link #ping(String)} 健康检查：是否可连通</li>
+ *   <li>{@link #getHosts} 列出全部已配置的主机</li>
+ *   <li>{@link #getCallServices} 列出方法追踪日志输出服务</li>
+ *   <li>{@link #setCallServiceEnable} 启用/停用某个日志服务</li>
+ *   <li>{@link #getMethodTraceList} 获取最近的方法调用追踪列表</li>
+ *   <li>{@link #getMethodTraceByTraceId} 根据 traceId 拉取完整调用链</li>
+ *   <li>{@link #decompileMethod} 反编译指定类的指定方法</li>
+ *   <li>{@link #getLogFiles} 列出日志目录下的文件</li>
+ *   <li>{@link #queryLogContent} 按条件查询日志行</li>
+ *   <li>{@link #downloadLog} 下载日志内容</li>
+ *   <li>{@link #startMonitor} 启动文件实时监控（tail）</li>
+ *   <li>{@link #stopMonitor} 停止文件实时监控</li>
+ *   <li>{@link #getMonitorStatus} 查看监控状态</li>
+ *   <li>{@link #ping} 健康检查：是否可连通</li>
  * </ol>
  */
 public class MethodTraceLogMcpService {

@@ -17,7 +17,7 @@ import java.util.Set;
  * <p>
  * 鉴权顺序（命中任一即放行）：
  *  1. X-Api-Key header 与配置值相等（CLI / MCP 友好）
- *  2. MTRACE_SESSION cookie 存在且在 {@link MtlSessionService} 中未过期（浏览器友好）
+ *  2. MTRACE_SESSION cookie 存在且在 {@link cn.wubo.method.trace.log.security.MtlSessionService} 中未过期（浏览器友好）
  *  <p>
  * 关闭鉴权：security.apiKey 为空时一律放行（仅本地/开发）。
  * 公开路径：HTML 页面 panel + 鉴权端点（login / session / logout）始终免密。
