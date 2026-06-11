@@ -38,7 +38,7 @@
 
 ```xml
 <dependency>
-    <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
+    <groupId>io.github.wb04307201</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
     <version>1.0.20</version>
 </dependency>
@@ -209,42 +209,24 @@ Start it disabled: `service-calls: [{ name: MyService, enable: false }]`, then f
 
 A separate, standalone Spring Boot process that speaks Model Context Protocol over stdio. It forwards `@Tool` calls to one or more hosts (each host = an app that has the starter on the classpath) over HTTP.
 
-```xml
-<dependency>
-    <groupId>com.gitee.wb04307201.methodTraceLog</groupId>
-    <artifactId>methodTraceLog-mcp</artifactId>
-    <version>1.0.20</version>
-</dependency>
-```
-
-```yaml
-method-trace-log:
-  mcp:
-    hosts:
-      - { name: local-dev, url: http://localhost:8080, description: Local dev,   api-key: change-me-in-production }
-      - { name: staging,   url: https://staging.example.com, description: Staging, api-key: ${STAGING_API_KEY} }
-```
-
-Launch the released jar with stdio transport, configured in your AI client (Claude Desktop, Cursor, ...):
-
-```bash
-java -jar methodTraceLog-mcp-1.0.20.jar
-```
-
-MCP server config block (`mcpServers`) for AI clients like Claude Desktop, Cursor, Cline:
+MCP server config (`mcpServers` JSON block) for AI clients like Claude Desktop, Cursor, Cline:
 
 ```json
 {
   "mcpServers": {
-    "methodTraceLog-mcp": {
-      "command": "java",
-      "args": ["-jar", "methodTraceLog-mcp-1.0.20.jar"]
+    "sql-forge-mcp": {
+      "command": "jbang.cmd",
+      "args": [
+        "io.github.wb04307201:methodTraceLog-mcp:1.0.20",
+        "--method-trace-log.mcp.hosts[0].name=local-dev",
+        "--method-trace-log.mcp.hosts[0].url=http://localhost:8080",
+        "--method-trace-log.mcp.hosts[0].description=Local dev",
+        "--method-trace-log.mcp.hosts[0].api-key=change-me-in-production"
+      ]
     }
   }
 }
 ```
-
-> Note: unlike `sql-forge-mcp` which passes hosts as CLI args (`--hosts[0].name=...`), methodTraceLog-mcp reads hosts from the `application.yml` packed inside the jar (see YAML block above). The JSON block only tells the AI client *how* to launch the process; the host list still lives in YAML.
 
 **13 tools exposed:** `getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`.
 
