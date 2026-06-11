@@ -5,14 +5,16 @@ import cn.wubo.method.trace.log.file.LogFileRealTimeService;
 import cn.wubo.method.trace.log.file.LogFileService;
 import cn.wubo.method.trace.log.file.dto.LogQueryRequest;
 import cn.wubo.method.trace.log.utils.ValidationUtils;
+import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -76,27 +78,52 @@ public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     @Bean("wb04307201MethodTraceLogFileRouter")
-    public RouterFunction<ServerResponse> methodTraceLogFileRouter(LogFileService fileService, Validator validator) {
+    public RouterFunction<ServerResponse> methodTraceLogFileRouter(LogFileService fileService, LogFileRealTimeService logFileRealTimeService, Validator validator) {
         RouterFunctions.Builder builder = RouterFunctions.route();
-        builder.GET("/methodTraceLog/logFile", request -> ServerResponse.ok().contentType(MediaType.TEXT_HTML).body(new ClassPathResource(("/logFile.html"))));
         builder.GET("/methodTraceLog/logFile/files", accept(MediaType.APPLICATION_JSON), request -> ServerResponse.ok().body(fileService.getLogFiles()));
         builder.POST("/methodTraceLog/logFile/query", accept(MediaType.APPLICATION_JSON), request -> {
-            LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
-            ValidationUtils.validate(validator, logQueryRequest);
-            return ServerResponse.ok().body(fileService.queryLogs(logQueryRequest));
+            try {
+                LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
+                ValidationUtils.validate(validator, logQueryRequest);
+                return ServerResponse.ok().body(fileService.queryLogs(logQueryRequest));
+            } catch (ConstraintViolationException e) {
+                // 字段校验失败(fileName 为空等)→ 400 + 真实原因
+                return ServerResponse.badRequest().body(Map.of(ERROR, "validation_failed", MESSAGE, e.getMessage()));
+            } catch (IllegalArgumentException e) {
+                // 文件不存在 / 路径非法 / 扩展名不允许 → 400 + 真实原因
+                return ServerResponse.badRequest().body(Map.of(ERROR, "bad_request", MESSAGE, e.getMessage()));
+            } catch (Exception e) {
+                return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(ERROR, "internal_error", MESSAGE, e.getMessage()));
+            }
         });
         builder.POST("/methodTraceLog/logFile/download", request -> {
-            LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
-            ValidationUtils.validate(validator, logQueryRequest);
-            return ServerResponse.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header("Content-Disposition", "attachment;filename=" +  URLEncoder.encode(logQueryRequest.getFileName(), StandardCharsets.UTF_8)).build((req, res) -> {
-                try (PrintWriter writer = res.getWriter()) {
-                    for (String line : fileService.downloadLog(logQueryRequest)) {
-                        writer.println(line);
+            try {
+                LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
+                ValidationUtils.validate(validator, logQueryRequest);
+                return ServerResponse.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header("Content-Disposition", "attachment;filename=" +  URLEncoder.encode(logQueryRequest.getFileName(), StandardCharsets.UTF_8)).build((req, res) -> {
+                    try (PrintWriter writer = res.getWriter()) {
+                        for (String line : fileService.downloadLog(logQueryRequest)) {
+                            writer.println(line);
+                        }
                     }
-                }
-                return null;
-            });
+                    return null;
+                });
+            } catch (ConstraintViolationException e) {
+                return ServerResponse.badRequest().body(Map.of(ERROR, "validation_failed", MESSAGE, e.getMessage()));
+            } catch (IllegalArgumentException e) {
+                return ServerResponse.badRequest().body(Map.of(ERROR, "bad_request", MESSAGE, e.getMessage()));
+            }
         });
+        // REST 端点：start/stop/status。和现有 STOMP /app/start-monitor 等并存，互不干扰。
+        builder.GET("/methodTraceLog/logFile/monitor/start", request -> {
+            String fileName = request.param("fileName").orElseThrow(() -> new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "fileName is required"));
+            return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(logFileRealTimeService.startMonitoring(fileName));
+        });
+        builder.GET("/methodTraceLog/logFile/monitor/stop", request -> {
+            String fileName = request.param("fileName").orElse("");
+            return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(logFileRealTimeService.stopMonitoring(fileName));
+        });
+        builder.GET("/methodTraceLog/logFile/monitor/status", request -> ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(logFileRealTimeService.getMonitorStatus()));
         return builder.build();
     }
 

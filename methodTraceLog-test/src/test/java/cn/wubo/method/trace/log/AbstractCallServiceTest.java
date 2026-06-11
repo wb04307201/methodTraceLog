@@ -47,7 +47,7 @@ class AbstractCallServiceTest {
     @Test
     void transContext_withNull_shouldReturnNull() {
         // When
-        Object result = abstractCallService.transContext(null);
+        Object result = AbstractCallService.transContext(null);
 
         // Then
         assertNull(result);
@@ -59,7 +59,7 @@ class AbstractCallServiceTest {
         String[] array = {"item1", "item2", "item3"};
 
         // When
-        Object result = abstractCallService.transContext(array);
+        Object result = AbstractCallService.transContext(array);
 
         // Then
         assertTrue(result instanceof List);
@@ -76,7 +76,7 @@ class AbstractCallServiceTest {
         Object[] nestedArray = {new String[]{"inner1", "inner2"}, "outer"};
 
         // When
-        Object result = abstractCallService.transContext(nestedArray);
+        Object result = AbstractCallService.transContext(nestedArray);
 
         // Then
         assertTrue(result instanceof List);
@@ -92,7 +92,7 @@ class AbstractCallServiceTest {
         Exception exception = new RuntimeException("Test exception");
 
         // When
-        Object result = abstractCallService.transContext(exception);
+        Object result = AbstractCallService.transContext(exception);
 
         // Then
         assertTrue(result instanceof String);
@@ -107,7 +107,7 @@ class AbstractCallServiceTest {
         MockHttpServletRequest request = new MockHttpServletRequest();
 
         // When
-        Object result = abstractCallService.transContext(request);
+        Object result = AbstractCallService.transContext(request);
 
         // Then
         assertEquals("HttpServletRequest", result);
@@ -119,7 +119,7 @@ class AbstractCallServiceTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         // When
-        Object result = abstractCallService.transContext(response);
+        Object result = AbstractCallService.transContext(response);
 
         // Then
         assertEquals("HttpServletResponse", result);
@@ -133,7 +133,7 @@ class AbstractCallServiceTest {
         when(mockFile.getSize()).thenReturn(1024L);
 
         // When
-        Object result = abstractCallService.transContext(mockFile);
+        Object result = AbstractCallService.transContext(mockFile);
 
         // Then
         assertTrue(result instanceof String);
@@ -148,7 +148,7 @@ class AbstractCallServiceTest {
         ResponseEntity<String> responseEntity = ResponseEntity.ok("test body");
 
         // When
-        Object result = abstractCallService.transContext(responseEntity);
+        Object result = AbstractCallService.transContext(responseEntity);
 
         // Then
         assertEquals("test body", result);
@@ -161,11 +161,71 @@ class AbstractCallServiceTest {
         Integer testInteger = 123;
 
         // When
-        Object result1 = abstractCallService.transContext(testString);
-        Object result2 = abstractCallService.transContext(testInteger);
+        Object result1 = AbstractCallService.transContext(testString);
+        Object result2 = AbstractCallService.transContext(testInteger);
 
         // Then
         assertEquals(testString, result1);
         assertEquals(testInteger, result2);
+    }
+
+    /**
+     * 复现 / 锁定 2026-06-09 的 Jackson 序列化 500 Bug：
+     * 模拟 Spring MVC handler 方法签名 {@code handleFileUpload(HttpServletRequest, MultipartFile, String)}
+     * 的 args 数组。transContext 必须把所有 servlet/多部分引用替换为可 JSON 序列化的占位字符串，
+     * 否则 /view/list 面板查询时 Jackson 会因 RequestFacade 已 recycle 而抛 IllegalStateException。
+     */
+    @Test
+    void transContext_withServletAndMultipartInArray_shouldReturnJsonSafeList() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MultipartFile mockFile = mock(MultipartFile.class);
+        when(mockFile.getOriginalFilename()).thenReturn("data.bin");
+        when(mockFile.getSize()).thenReturn(2048L);
+
+        Object[] args = {request, mockFile, "description"};
+
+        Object result = AbstractCallService.transContext(args);
+
+        assertTrue(result instanceof List);
+        @SuppressWarnings("unchecked")
+        List<Object> list = (List<Object>) result;
+        assertEquals(3, list.size());
+        assertEquals("HttpServletRequest", list.get(0));
+        assertTrue(list.get(1) instanceof String);
+        assertTrue(((String) list.get(1)).contains("data.bin"));
+        assertEquals("description", list.get(2));
+        // 关键：原 HttpServletRequest 实例不能出现在结果里（持有它就会在序列化时炸）
+        assertNotSame(request, list.get(0));
+        assertNotSame(mockFile, list.get(1));
+    }
+
+    /**
+     * 幂等性测试：已经净化过的 String / List 再次调 transContext 应当原样返回。
+     * SimpleLogServiceImpl 防御性兜底会重复调用一次，依赖这个性质。
+     */
+    @Test
+    void transContext_idempotent_forAlreadyConvertedValues() {
+        Object once = AbstractCallService.transContext(new Object[]{"a", "b"});
+        Object twice = AbstractCallService.transContext(once);
+        assertEquals(once, twice);
+
+        Object exOnce = AbstractCallService.transContext(new RuntimeException("oops"));
+        Object exTwice = AbstractCallService.transContext(exOnce);
+        assertEquals(exOnce, exTwice);
+    }
+
+    /**
+     * ResponseEntity 体内若再嵌套 servlet 引用，递归调用应能继续净化。
+     * (修复后新增保护：以前 ResponseEntity.getBody() 不递归，依赖此保护避免再次出现 500)
+     */
+    @Test
+    void transContext_withResponseEntityWrappingRequest_shouldStripRequest() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        ResponseEntity<Object> entity = ResponseEntity.ok(request);
+
+        Object result = AbstractCallService.transContext(entity);
+
+        assertEquals("HttpServletRequest", result);
+        assertNotSame(request, result);
     }
 }

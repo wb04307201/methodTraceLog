@@ -3,30 +3,40 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.gitee.wb04307201</groupId>
+    <groupId>io.github.wb04307201</groupId>
     <artifactId>methodTraceLog-parent</artifactId>
     <version>1.0-SNAPSHOT</version>
-
     <packaging>pom</packaging>
-    <url>
-        https://gitee.com/wb04307201/methodTraceLog
-    </url>
+    <name>methodTraceLog-parent</name>
+    <description>Spring Boot starter，提供方法调用链路追踪、性能监控、日志文件管理、CFR 反编译。附带独立 MCP 服务（methodTraceLog-mcp），通过 stdio 把上述能力开放给 AI Agent。</description>
+    <url>https://github.com/wb04307201/methodTraceLog</url>
+
+    <developers>
+        <developer>
+            <id>wb04307201</id>
+            <name>wubo</name>
+            <email>wubo_aaa@163.com</email>
+        </developer>
+    </developers>
+
     <licenses>
         <license>
             <name>The Apache Software License, Version 2.0</name>
             <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
         </license>
     </licenses>
-    <developers>
-        <developer>
-            <name>wubo</name>
-        </developer>
-    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/wb04307201/methodTraceLog.git</connection>
+        <developerConnection>scm:git:git@github.com:wb04307201/methodTraceLog.git</developerConnection>
+        <url>https://github.com/wb04307201/methodTraceLog</url>
+    </scm>
 
     <modules>
         <module>methodTraceLog</module>
         <module>methodTraceLog-spring-boot-autoconfigure</module>
         <module>methodTraceLog-spring-boot-starter</module>
+        <module>methodTraceLog-mcp</module>
         <module>methodTraceLog-test</module>
     </modules>
 
@@ -34,11 +44,12 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-boot.version>3.5.8</spring-boot.version>
-        <spring-ai.version>1.1.1</spring-ai.version>
-        <lombok.version>1.18.42</lombok.version>
+        <spring-boot.version>3.5.14</spring-boot.version>
+        <spring-ai.version>1.1.7</spring-ai.version>
+        <lombok.version>1.18.46</lombok.version>
         <javassist.version>3.30.2-GA</javassist.version>
         <cfr.version>0.152</cfr.version>
+        <opentelemetry.version>1.41.0</opentelemetry.version>
     </properties>
 
     <dependencyManagement>
@@ -77,7 +88,39 @@
                 <artifactId>cfr</artifactId>
                 <version>${cfr.version}</version>
             </dependency>
+            <dependency>
+                <groupId>io.opentelemetry</groupId>
+                <artifactId>opentelemetry-bom</artifactId>
+                <version>${opentelemetry.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.15.0</version>
+                    <configuration>
+                        <source>17</source>
+                        <target>17</target>
+                        <encoding>UTF-8</encoding>
+                        <parameters>true</parameters>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 
 </project>

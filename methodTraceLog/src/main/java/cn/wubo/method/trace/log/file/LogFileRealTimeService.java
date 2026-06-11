@@ -57,24 +57,22 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
      */
     @Override
     public void afterPropertiesSet() throws Exception {
-        try {
-            // 初始化文件监控服务和线程池
-            this.watchService = FileSystems.getDefault().newWatchService();
-            this.executorService = Executors.newScheduledThreadPool(2);
+        // 初始化文件监控服务和线程池
+        this.watchService = FileSystems.getDefault().newWatchService();
+        this.executorService = Executors.newScheduledThreadPool(2);
 
-            // 注册日志目录监控
-            Path logPath = Paths.get(properties.getLogPath());
-            if (!Files.exists(logPath)) {
-                throw new IllegalStateException("Log directory does not exist: " + properties.getLogPath());
-            }
-
-            logPath.register(this.watchService, StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_CREATE);
-
-            // 启动文件监控线程
-            this.executorService.submit(this::watchFiles);
-        } catch (Exception e) {
-            log.error(e.getMessage(), e);
+        // 注册日志目录监控
+        Path logPath = Paths.get(properties.getLogPath());
+        if (!Files.exists(logPath)) {
+            // 让 Spring 启动失败而不是静默地"假装监控"成功
+            throw new IllegalStateException("Log directory does not exist: " + properties.getLogPath());
         }
+
+        logPath.register(this.watchService, StandardWatchEventKinds.ENTRY_MODIFY, StandardWatchEventKinds.ENTRY_CREATE);
+
+        // 启动文件监控线程
+        this.executorService.submit(this::watchFiles);
+        log.info("mtl-log-realtime: watching {}", properties.getLogPath());
     }
 
 
@@ -236,24 +234,20 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
         // 安全检查：防止路径遍历攻击和非法文件名
         FileUtils.pathInspection(fileName);
 
+        // 初始化文件读取位置
+        File file = new File(properties.getLogPath(), fileName);
+        if (!file.exists() || !file.isFile()) {
+            throw new FileNotFoundException(fileName);
+        }
+        synchronized (filePositions) {
+            filePositions.put(fileName, file.length());
+        }
+
+        // 在所有状态确认就绪后再发布 volatile 标志
         currentMonitorFile = fileName;
         monitoring = true;
 
-        // 初始化文件读取位置
-        File file = new File(properties.getLogPath(), fileName);
-        if (file.exists() && file.isFile()) {
-            // 使用同步块确保线程安全
-            synchronized (filePositions) {
-                filePositions.put(fileName, file.length());
-            }
-
-            // 确保所有初始化操作成功后再设置监控状态
-            currentMonitorFile = fileName;
-            monitoring = true;
-
-            return Map.of("type", "monitor_started", "fileName", fileName, MESSAGE, "开始监控日志文件: " + fileName);
-        }else
-            throw new FileNotFoundException(fileName);
+        return Map.of("type", "monitor_started", "fileName", fileName, MESSAGE, "开始监控日志文件: " + fileName);
     }
 
 

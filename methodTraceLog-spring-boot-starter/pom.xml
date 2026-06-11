@@ -3,7 +3,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>com.gitee.wb04307201</groupId>
+        <groupId>io.github.wb04307201</groupId>
         <artifactId>methodTraceLog-parent</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
@@ -11,7 +11,7 @@
     <packaging>jar</packaging>
     <dependencies>
         <dependency>
-            <groupId>com.gitee.wb04307201</groupId>
+            <groupId>io.github.wb04307201</groupId>
             <artifactId>methodTraceLog-spring-boot-autoconfigure</artifactId>
             <version>${project.parent.version}</version>
         </dependency>

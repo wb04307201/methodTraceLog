@@ -11,19 +11,15 @@ method-trace-log:
       - .log
       - .txt
       - .out
-    max-lines: 1000    # 单次查询最大行数
-    max-file-size: 100    # 文件最大大小（MB）
+    scan-lines: 10000  # 流式扫描的最大行数上限(也是内存的实际安全网,与分页 pageSize 无关)。1~2MB 内存,中等生产服务能覆盖 1~2 小时窗口
+  security:
+    api-key: ${METHOD_TRACE_LOG_API_KEY:}    # 从环境变量读取,默认空(dev 模式,不鉴权)
+  decompile:
+    timeout-seconds: 10
 management:
   endpoints:
     web:
       exposure:
         include: methodtrace
-spring:
-  ai:
-    ollama:
-      chat:
-        options:
-          model: qwen3-coder
-      base-url: http://localhost:11434
-
-
+server:
+  port: 8080

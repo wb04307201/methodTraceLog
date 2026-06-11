@@ -1,0 +1,23 @@
+spring:
+  main:
+    web-application-type: none
+    banner-mode: off
+  ai:
+    mcp:
+      server:
+        name: methodTraceLog-mcp-server
+        version: 1.0.20
+
+# Hosts to expose to AI agents. Each host must be a running Spring Boot app
+# that has the methodTraceLog-spring-boot-starter on the classpath.
+method-trace-log:
+  mcp:
+    hosts:
+      - name: local-dev
+        url: http://localhost:8080
+        description: 本地开发主机
+        api-key: test-secret-1234   # 与 method-trace-log.security.api-key 保持一致；未启用鉴权则留空
+
+logging:
+  file:
+    name: ./mcp/method-trace-log-mcp-server.log

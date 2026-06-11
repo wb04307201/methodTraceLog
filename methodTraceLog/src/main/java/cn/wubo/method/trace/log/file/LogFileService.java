@@ -9,16 +9,19 @@ import org.springframework.util.StringUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class LogFileService {
 
@@ -46,49 +49,57 @@ public class LogFileService {
         }
 
         return Arrays.stream(files)
-                // 过滤出有效的日志文件
                 .filter(this::isValidFileExtensions)
-                // 将文件信息转换为Map对象
-                .map(file -> Map.<String, Object>of("name", file.getName(), "size", file.length(), "lastModified", file.lastModified(), "readable", file.canRead())).toList();
+                .map(file -> Map.<String, Object>of(
+                        "name", file.getName(),
+                        "size", file.length(),
+                        "lastModified", file.lastModified(),
+                        "readable", file.canRead()))
+                .toList();
     }
 
 
     /**
      * 验证文件扩展名是否有效
-     *
-     * @param file 待验证的文件对象
-     * @return 如果文件扩展名在允许的扩展名列表中则返回true，否则返回false
      */
     private Boolean isValidFileExtensions(File file) {
-        // 获取文件名并转换为小写，用于后续扩展名匹配
         String fileName = file.getName().toLowerCase();
-        // 检查文件名是否以允许的扩展名结尾
         return properties.getAllowedExtensions().stream().anyMatch(fileName::endsWith);
     }
 
 
+    /**
+     * 分页查询日志。
+     * <p>
+     * 实现要点：
+     *  1. 用 Files.lines() 流式读取，避免 readAllLines 一次载入整个文件
+     *  2. 限制最大扫描行数（防止 N GB 文件扫太久，也是内存的实际安全网）
+     *  3. 反向：直接在流中反向收集（reverse=true 业务场景是"看最新日志"）
+     */
     public LogQueryResponse queryLogs(LogQueryRequest request) throws IOException {
         String fileName = request.getFileName();
 
         File logFile = getFile(fileName);
 
-        List<String> allLines = Files.readAllLines(logFile.toPath());
+        int maxScanLines = Math.max(properties.getScanLines(), 1000);
+        List<String> filteredLines;
+        try (Stream<String> stream = Files.lines(logFile.toPath(), StandardCharsets.UTF_8)) {
+            Stream<String> limited = stream.limit(maxScanLines);
+            filteredLines = filterLines(limited, request);
+        }
 
-        // 过滤日志行
-        List<String> filteredLines = filterLines(allLines, request);
-
-        // 倒序处理
         if (request.isReverse()) {
             Collections.reverse(filteredLines);
         }
 
-        // 分页处理
         int totalLines = filteredLines.size();
         int totalPages = (int) Math.ceil((double) totalLines / request.getPageSize());
         int startIndex = (request.getPage() - 1) * request.getPageSize();
         int endIndex = Math.min(startIndex + request.getPageSize(), totalLines);
 
-        List<String> pageLines = filteredLines.subList(startIndex, endIndex);
+        List<String> pageLines = startIndex < totalLines
+                ? new ArrayList<>(filteredLines.subList(startIndex, endIndex))
+                : Collections.emptyList();
 
         LogQueryResponse response = new LogQueryResponse();
         response.setLines(pageLines);
@@ -99,64 +110,63 @@ public class LogFileService {
         response.setLastModified(LocalDateTime.ofInstant(Instant.ofEpochMilli(logFile.lastModified()), ZoneId.systemDefault()));
 
         return response;
-
     }
 
-    private List<String> filterLines(List<String> lines, LogQueryRequest request) {
-        if (!hasFilter(request)) {
-            return lines;
-        }
-
-        return lines.stream()
-                .map(line -> LogLineInfo.parse(line, logPattern))
-                .filter(lineInfo -> lineInfo.matchesFilter(request))
-                .map(LogLineInfo::getOriginalLine)
-                .collect(Collectors.toList());
+    private List<String> filterLines(Stream<String> stream, LogQueryRequest request) {
+        boolean needFilter = hasFilter(request);
+        Stream<String> filtered = needFilter
+                ? stream
+                    .map(line -> LogLineInfo.parse(line, logPattern))
+                    .filter(lineInfo -> lineInfo.matchesFilter(request))
+                    .map(LogLineInfo::getOriginalLine)
+                : stream;
+        return filtered.collect(Collectors.toList());
     }
 
-    /**
-     * 检查日志查询请求是否包含过滤条件
-     *
-     * @param request 日志查询请求对象，可能为null
-     * @return 如果请求包含任意过滤条件（关键词、级别、开始时间、结束时间）则返回true，否则返回false
-     */
     private boolean hasFilter(LogQueryRequest request) {
         if (request == null) {
             return false;
         }
-        // 检查是否设置了任意过滤条件：关键词、级别、时间范围
-        return StringUtils.hasText(request.getKeyword()) || StringUtils.hasText(request.getLevel()) || request.getStartTime() != null || request.getEndTime() != null;
+        return StringUtils.hasText(request.getKeyword())
+                || StringUtils.hasText(request.getLevel())
+                || request.getStartTime() != null
+                || request.getEndTime() != null;
     }
 
     private File getFile(String fileName) {
-        // 安全检查：防止路径遍历攻击和非法文件名
         FileUtils.pathInspection(fileName);
 
         File logFile = new File(properties.getLogPath(), fileName);
 
         if (!logFile.exists()) {
-            throw new IllegalArgumentException("File does not exist");
+            throw new IllegalArgumentException("File does not exist: " + fileName);
         }
         if (!logFile.isFile()) {
-            throw new IllegalArgumentException("Not a valid file");
+            throw new IllegalArgumentException("Not a valid file: " + fileName);
         }
-        boolean isValidFileExtensions = isValidFileExtensions(logFile);
-        if (!isValidFileExtensions) {
-            throw new IllegalArgumentException("Unsupported file type");
+        if (!isValidFileExtensions(logFile)) {
+            throw new IllegalArgumentException("Unsupported file type: " + fileName);
         }
 
-        long fileSizeMB = logFile.length() / (1024 * 1024);
-        if (fileSizeMB > properties.getMaxFileSize()) {
-            throw new IllegalArgumentException(String.format("File too large, exceeds limit of %dMB", properties.getMaxFileSize()));
-        }
+        // 注意:这里不做 size 校验。Files.lines() + limit(scanLines) 是流式懒加载,
+        // 真实内存占用只跟 scanLines 有关、跟文件大小无关,大日志文件能正常查询。
 
         return logFile;
     }
 
+    /**
+     * 下载日志（流式过滤，避免一次性加载）。
+     */
     public List<String> downloadLog(LogQueryRequest request) throws IOException {
         File logFile = getFile(request.getFileName());
-        List<String> allLines = Files.readAllLines(logFile.toPath());
-        return filterLines(allLines, request);
+        int maxScanLines = Math.max(properties.getScanLines(), 1000);
+        try (Stream<String> stream = Files.lines(logFile.toPath(), StandardCharsets.UTF_8)) {
+            Stream<String> limited = stream.limit(maxScanLines);
+            List<String> result = filterLines(limited, request);
+            if (request.isReverse()) {
+                Collections.reverse(result);
+            }
+            return result;
+        }
     }
-
 }

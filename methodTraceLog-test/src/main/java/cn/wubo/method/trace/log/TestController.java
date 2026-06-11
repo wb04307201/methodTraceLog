@@ -42,6 +42,12 @@ public class TestController {
         return testComponent.hello3(testService.hello(name)) + a;
     }
 
+    @GetMapping("/aspectLog")
+    public String aspectLog(@RequestParam(value = "name", required = false) String name) {
+        // 内部调用 @AspectLog 注解的方法
+        return testComponent.aspectLogDemo(name == null ? "world" : name);
+    }
+
     @PostMapping("/post")
     public ResponseEntity<Map<String, String>> post(@RequestBody Map<String, String> map) {
         return ResponseEntity.ok().body(map);

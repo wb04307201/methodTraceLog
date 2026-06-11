@@ -27,10 +27,16 @@ public abstract class AbstractCallService implements ICallService {
     /**
      * 转换上下文对象为可序列化或可处理的格式
      *
+     * <p>提升为 {@code public static} 工具方法，使得 {@link cn.wubo.method.trace.log.LogAspect}
+     * 在写入 {@link ServiceCallInfo#setContext(Object)} 之前就能对 args/returnValue/exception
+     * 做统一净化，避免在 JSON 序列化阶段遇到已 recycle 的 servlet/multi-part 引用。
+     *
+     * <p>幂等：对已经转换过的值（String / List / 基本类型）再次调用不会改变内容。
+     *
      * @param context 原始上下文对象，可能为null
      * @return 转换后的对象，可能的类型包括：null、List、String、原始对象等
      */
-    protected Object transContext(Object context) {
+    public static Object transContext(Object context) {
         if (context == null) {
             return null; // 明确处理 null 输入
         }
@@ -69,11 +75,18 @@ public abstract class AbstractCallService implements ICallService {
 
         // 处理响应实体，提取响应体内容
         if (context instanceof ResponseEntity<?> entity) {
-            return entity.getBody();
+            return transContext(entity.getBody());
         }
 
         // 兜底返回原始对象
         return context;
+    }
+
+    /**
+     * 实例方法保留以兼容旧调用方。内部直接委派给静态方法。
+     */
+    protected Object transContextInstance(Object context) {
+        return transContext(context);
     }
 
 }

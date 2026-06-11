@@ -1,5 +1,7 @@
 package cn.wubo.method.trace.log;
 
+import cn.wubo.method.trace.log.sampler.HeadBasedSampler;
+import cn.wubo.method.trace.log.sampler.Sampler;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -7,13 +9,15 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.MDC;
 
+import java.lang.reflect.Method;
 import java.util.UUID;
 
 @Slf4j
 @Aspect
 public class LogAspect {
 
-    private  final CallServiceStrategy callServiceStrategy;
+    private final CallServiceStrategy callServiceStrategy;
+    private final Sampler sampler;
 
     public static final String LOG_TRACE_ID = "traceid";
 
@@ -21,8 +25,19 @@ public class LogAspect {
 
     public static final String LOG_SPAN_ID = "spanid";
 
+    /**
+     * MDC 中的采样标记。"true" = 已采样 / "false" = 未采样。
+     * 子调用读取此值继承父决定，不再投骰子。
+     */
+    public static final String LOG_SAMPLED = "mtlSampled";
+
     public LogAspect(CallServiceStrategy callServiceStrategy) {
+        this(callServiceStrategy, new HeadBasedSampler(1.0));
+    }
+
+    public LogAspect(CallServiceStrategy callServiceStrategy, Sampler sampler) {
         this.callServiceStrategy = callServiceStrategy;
+        this.sampler = sampler;
     }
 
     /**
@@ -36,9 +51,9 @@ public class LogAspect {
      */
     @Around("(@within(org.springframework.stereotype.Component) || " +
             "@within(org.springframework.stereotype.Service) || " +
-            "@within(org.springframework.web.bind.annotation.RestController)) && " +
+            "@within(org.springframework.web.bind.annotation.RestController) || " +
+            "@annotation(cn.wubo.method.trace.log.AspectLog)) && " +
             "!within(cn.wubo.method.trace.log.ICallService+) && " +
-            "!within(cn.wubo.method.trace.log.ai.IAnalyze+) && " +
             "!within(cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint) &&" +
             "!within(cn.wubo.method.trace.log.file.LogFileService) && " +
             "!within(cn.wubo.method.trace.log.file.LogFileRealTimeService)")
@@ -48,6 +63,7 @@ public class LogAspect {
         String traceid = MDC.get(LOG_TRACE_ID);
         String prepspanid = MDC.get(LOG_PSPAN_ID);
         String prespanid = MDC.get(LOG_SPAN_ID);
+        String preSampled = MDC.get(LOG_SAMPLED);
         String pspanid = null;
 
         // 若无跟踪ID，则生成一个新的；否则获取当前跨度ID作为父跨度ID
@@ -62,39 +78,91 @@ public class LogAspect {
         MDC.put(LOG_TRACE_ID, traceid);
         MDC.put(LOG_SPAN_ID, spanid);
 
-        // 构建方法调用前的服务调用信息
-        ServiceCallInfo before = new ServiceCallInfo(traceid, pspanid, spanid, (MethodSignature) jp.getSignature(), jp.getArgs(), LogActionEnum.BEFORE, System.currentTimeMillis());
-        ServiceCallInfo after = ServiceCallInfo.copyOf(before);
+        // 决定本调用是否采样。子调用继承父决定，避免每层都投骰子。
+        boolean sampled;
+        if (preSampled != null) {
+            sampled = Boolean.parseBoolean(preSampled);
+        } else {
+            sampled = sampler.shouldStartRoot();
+        }
+        MDC.put(LOG_SAMPLED, Boolean.toString(sampled));
+
+        // 构建方法调用前/后的服务调用信息（仅在 sampled 时才有意义）
+        ServiceCallInfo before = null;
+        ServiceCallInfo after = null;
+        if (sampled) {
+            // 关键：在写入 ServiceCallInfo.context 之前先做 transContext 净化。
+            // 直接持有 jp.getArgs() 会在 JSON 序列化阶段（/view/list 面板查询时），
+            // 因 Tomcat 已回收 RequestFacade 而抛 IllegalStateException。
+            // 净化后 args/returnValue/exception 都变成可 JSON 序列化的值（List<String> / String / 基本类型）。
+            Object safeArgs = AbstractCallService.transContext(jp.getArgs());
+            before = new ServiceCallInfo(traceid, pspanid, spanid, (MethodSignature) jp.getSignature(), safeArgs, LogActionEnum.BEFORE, System.currentTimeMillis());
+            // @AspectLog 注解覆盖 methodName / methodSignatureShortString
+            applyAspectLogOverride(jp, before);
+            after = ServiceCallInfo.copyOf(before);
+        }
 
         try {
-            // 执行前置处理逻辑
-            callServiceStrategy.consumer(before);
+            if (sampled) {
+                // 执行前置处理逻辑
+                callServiceStrategy.consumer(before);
+            }
             // 执行目标方法
             returnValue = jp.proceed();
 
-            // 设置返回值并执行后置正常返回处理逻辑
-            after.setContext(returnValue);
-            after.setLogActionEnum(LogActionEnum.AFTER_RETURN);
-            after.setTimeMillis(System.currentTimeMillis());
-            callServiceStrategy.consumer(after);
+            if (sampled) {
+                // 设置返回值并执行后置正常返回处理逻辑
+                after.setContext(AbstractCallService.transContext(returnValue));
+                after.setLogActionEnum(LogActionEnum.AFTER_RETURN);
+                after.setTimeMillis(System.currentTimeMillis());
+                callServiceStrategy.consumer(after);
+            }
         } catch (Exception e) {
-            // 设置异常信息并执行后置异常处理逻辑
-            after.setContext(e);
-            after.setLogActionEnum(LogActionEnum.AFTER_THROW);
-            after.setTimeMillis(System.currentTimeMillis());
-            callServiceStrategy.consumer(after);
+            if (sampled) {
+                // 设置异常信息并执行后置异常处理逻辑
+                after.setContext(AbstractCallService.transContext(e));
+                after.setLogActionEnum(LogActionEnum.AFTER_THROW);
+                after.setTimeMillis(System.currentTimeMillis());
+                callServiceStrategy.consumer(after);
+            }
             throw e;
         } finally {
-            if (pspanid == null){
+            if (pspanid == null) {
                 MDC.remove(LOG_TRACE_ID);
                 MDC.remove(LOG_SPAN_ID);
-            }else{
+            } else {
                 MDC.put(LOG_PSPAN_ID, prepspanid);
                 MDC.put(LOG_SPAN_ID, prespanid);
+            }
+            if (preSampled == null) {
+                MDC.remove(LOG_SAMPLED);
+            } else {
+                MDC.put(LOG_SAMPLED, preSampled);
             }
         }
 
         return returnValue;
+    }
+
+    /**
+     * 如果方法上有 @AspectLog 注解，把显示名替换为注解 value()。
+     * tags 暂时不展开（若需要可以让 ICallService 自行从 MDC 读 mtl.tag.*）。
+     */
+    private void applyAspectLogOverride(ProceedingJoinPoint jp, ServiceCallInfo info) {
+        try {
+            MethodSignature sig = (MethodSignature) jp.getSignature();
+            Method method = sig.getMethod();
+            AspectLog ann = method.getAnnotation(AspectLog.class);
+            if (ann == null) {
+                return;
+            }
+            if (ann.value() != null && !ann.value().isEmpty()) {
+                info.setMethodName(ann.value());
+                info.setMethodSignatureShortString(ann.value() + "(..)");
+            }
+        } catch (Exception ignore) {
+            // 注解读取失败不应影响主流程
+        }
     }
 
 
