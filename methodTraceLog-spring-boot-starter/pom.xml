@@ -8,6 +8,7 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
+    <name>methodTraceLog Spring Boot Starter</name>
     <packaging>jar</packaging>
     <dependencies>
         <dependency>

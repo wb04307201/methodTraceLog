@@ -8,6 +8,7 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
     <artifactId>methodTraceLog</artifactId>
+    <name>methodTraceLog</name>
     <packaging>jar</packaging>
     <dependencies>
         <dependency>
