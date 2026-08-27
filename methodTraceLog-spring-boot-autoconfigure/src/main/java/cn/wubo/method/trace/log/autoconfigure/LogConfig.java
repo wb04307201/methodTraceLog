@@ -366,7 +366,8 @@ public class LogConfig {
      * <p>
      * GET /methodTraceLog/decompile?className=foo.Bar&methodName=baz&timeoutSeconds=10
      * <p>
-     * 返回 String 文本（plain/text），内容为去掉注解后的 Java 源码。
+     * 返回 String 文本（plain/text），内容为去掉注解后、只含目标方法的 Java 源码；
+     * 若无法从整类源码中切出目标方法，则 fallback 返回整类源码。
      * 异常会由 RouterFunction 框架包装为 4xx/5xx + 简单 message body。
      */
     private void decompileRouter(RouterFunctions.Builder builder, MethodTraceLogProperties properties) {
@@ -386,7 +387,10 @@ public class LogConfig {
                     })
                     .orElse(defaultTimeout);
             String src = DecompilerUtils.decompile(className, methodName, timeout);
-            return ServerResponse.ok().contentType(MediaType.TEXT_PLAIN).body(DecompilerUtils.removeAnnotations(src));
+            String stripped = DecompilerUtils.removeAnnotations(src);
+            // 只回目标方法；切不到就 fallback 全量，保证行为不退化
+            String body = DecompilerUtils.extractMethod(stripped, methodName).orElse(stripped);
+            return ServerResponse.ok().contentType(MediaType.TEXT_PLAIN).body(body);
         });
     }
 

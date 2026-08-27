@@ -25,6 +25,7 @@ import java.util.concurrent.*;
  *  2. 写临时文件 + CFR daemon 线程 + future timeout —— 病态输入会被取消，临时文件总是清理。
  *  3. 50MB 字节上限保护 tmp 分区不被病态类撑爆。
  *  4. {@link #removeAnnotations(String)} 配套提供去注解，便于把代码喂给 LLM。
+ *  5. {@link #extractMethod(String, String)} 从整个类源码里切出目标方法，避免返回整类噪声。
  */
 @UtilityClass
 @Slf4j
@@ -204,6 +205,54 @@ public class DecompilerUtils {
                 .build();
         driver.analyse(List.of(classFilePath));
         return javaOutput.toString();
+    }
+
+    /**
+     * 从 CFR 输出的完整类源码中切出指定方法的源码块（含签名 + body）。
+     * <p>
+     * 用「修饰符 + 返回类型 + 方法名(...)」正则定位签名行，再用大括号配对确定 body 结束位置，
+     * 比 CFR 自带的 {@code --methodname} 过滤更鲁棒（CFR 仍会输出整个类的壳和字段）。
+     * <p>
+     * 切不到时返回 {@link Optional#empty()}，调用方应 fallback 到全量源码。
+     *
+     * @param src        完整类源码（通常是 {@link #decompile} 的结果，可先过 {@link #removeAnnotations}）
+     * @param methodName 目标方法名
+     * @return 目标方法的源码块，找不到 / 大括号不配平时返回 empty
+     */
+    public java.util.Optional<String> extractMethod(String src, String methodName) {
+        if (src == null || methodName == null) {
+            return java.util.Optional.empty();
+        }
+        // 匹配行首任意修饰符 + 返回类型 + methodName( ... ) {
+        // 返回类型允许数组 [] / 泛型 <> / 全限定名 . / 通配符 ?
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "(?m)^[ \\t]*((?:public|protected|private|static|final|abstract|synchronized|native|default)\\s+)*" +
+                        "[\\w<>\\[\\], ?.]+\\s+" +
+                        java.util.regex.Pattern.quote(methodName) +
+                        "\\s*\\([^)]*\\)\\s*(?:throws[^{]*)?\\{");
+        java.util.regex.Matcher m = p.matcher(src);
+        if (!m.find()) {
+            return java.util.Optional.empty();
+        }
+        int start = m.start();
+        int braceOpen = src.indexOf('{', m.end() - 1);
+        if (braceOpen < 0) {
+            return java.util.Optional.empty();
+        }
+        int depth = 1;
+        int i = braceOpen + 1;
+        while (i < src.length() && depth > 0) {
+            char c = src.charAt(i++);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+            }
+        }
+        if (depth != 0) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(src.substring(start, i));
     }
 
     /**
