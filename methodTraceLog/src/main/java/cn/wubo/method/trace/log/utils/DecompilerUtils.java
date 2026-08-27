@@ -210,7 +210,8 @@ public class DecompilerUtils {
     /**
      * 从 CFR 输出的完整类源码中切出指定方法的源码块（含签名 + body）。
      * <p>
-     * 用「修饰符 + 返回类型 + 方法名(...)」正则定位签名行，再用大括号配对确定 body 结束位置，
+     * 用「修饰符 + 可选泛型 + 返回类型 + 方法名(...)」正则定位签名行，
+     * 再用大括号配对（跳过字符串 / 字符字面量 / 注释）确定 body 结束位置，
      * 比 CFR 自带的 {@code --methodname} 过滤更鲁棒（CFR 仍会输出整个类的壳和字段）。
      * <p>
      * 切不到时返回 {@link Optional#empty()}，调用方应 fallback 到全量源码。
@@ -223,12 +224,15 @@ public class DecompilerUtils {
         if (src == null || methodName == null) {
             return java.util.Optional.empty();
         }
-        // 匹配行首任意修饰符 + 返回类型 + methodName( ... ) {
-        // 返回类型允许数组 [] / 泛型 <> / 全限定名 . / 通配符 ?
+        // 匹配：可选修饰符 + 可选泛型声明（支持一层嵌套 <>）+ 返回类型 + \b methodName( ... ) {
+        // 泛型声明允许 <T extends Comparable<T>> 这种结构；返回类型允许数组 [] / 泛型 <> /
+        // 全限定名 . / 通配符 ?；前后空白包含换行（CFR 长泛型签名会换行）。
+        // 用 \b 锁方法名边界，避免误匹配 myfoo 里的 foo；不锚定行首，让内联方法也命中。
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-                "(?m)^[ \\t]*((?:public|protected|private|static|final|abstract|synchronized|native|default)\\s+)*" +
+                "((?:public|protected|private|static|final|abstract|synchronized|native|default)\\s+)*" +
+                        "(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>\\s+)?" +
                         "[\\w<>\\[\\], ?.]+\\s+" +
-                        java.util.regex.Pattern.quote(methodName) +
+                        "\\b" + java.util.regex.Pattern.quote(methodName) +
                         "\\s*\\([^)]*\\)\\s*(?:throws[^{]*)?\\{");
         java.util.regex.Matcher m = p.matcher(src);
         if (!m.find()) {
@@ -239,20 +243,87 @@ public class DecompilerUtils {
         if (braceOpen < 0) {
             return java.util.Optional.empty();
         }
+        // 大括号配对时跳过字符串 / 字符字面量 / 行注释 / 块注释，避免被源码里的 `{}` 误判。
         int depth = 1;
         int i = braceOpen + 1;
-        while (i < src.length() && depth > 0) {
-            char c = src.charAt(i++);
-            if (c == '{') {
+        int n = src.length();
+        while (i < n && depth > 0) {
+            char c = src.charAt(i);
+            if (c == '"') {
+                i = skipStringLiteral(src, i + 1, '"');
+            } else if (c == '\'') {
+                i = skipStringLiteral(src, i + 1, '\'');
+            } else if (c == '/' && i + 1 < n && src.charAt(i + 1) == '/') {
+                i = skipLineComment(src, i + 2);
+            } else if (c == '/' && i + 1 < n && src.charAt(i + 1) == '*') {
+                i = skipBlockComment(src, i + 2);
+            } else if (c == '{') {
                 depth++;
+                i++;
             } else if (c == '}') {
                 depth--;
+                i++;
+            } else {
+                i++;
             }
         }
         if (depth != 0) {
             return java.util.Optional.empty();
         }
         return java.util.Optional.of(src.substring(start, i));
+    }
+
+    /**
+     * 从 {@code start} 开始跳过字符串 / 字符字面量内容，返回字面量结束后下一字符的索引。
+     * 处理 {@code \} 转义（含 {@code \"}、{@code \'}、{@code \\} 等）；遇到文件末尾或未闭合字面量
+     * 时返回 {@code src.length()}，调用方会自然终止主循环。
+     */
+    private static int skipStringLiteral(String src, int start, char quote) {
+        int i = start;
+        int n = src.length();
+        while (i < n) {
+            char c = src.charAt(i);
+            if (c == '\\' && i + 1 < n) {
+                i += 2; // 跳过转义序列：反斜杠 + 任意后续字符
+                continue;
+            }
+            if (c == quote) {
+                return i + 1;
+            }
+            if (c == '\n') {
+                // 普通字符串/字符字面量不允许裸换行；到此为止算未闭合
+                return i;
+            }
+            i++;
+        }
+        return i;
+    }
+
+    /**
+     * 跳到行尾换行符处（不含换行符），返回换行符的索引。
+     */
+    private static int skipLineComment(String src, int start) {
+        int i = start;
+        int n = src.length();
+        while (i < n && src.charAt(i) != '\n') {
+            i++;
+        }
+        return i;
+    }
+
+    /**
+     * 跳过 {@code /* ... *}{@code /} 块注释。找不到结束符时返回 {@code src.length()}。
+     */
+    private static int skipBlockComment(String src, int start) {
+        int i = start;
+        int n = src.length();
+        while (i + 1 < n) {
+            if (src.charAt(i) == '*' && src.charAt(i + 1) == '/') {
+                return i + 2;
+            }
+            i++;
+        }
+        return n;
     }
 
     /**

@@ -89,4 +89,49 @@ class DecompilerUtilsExtractMethodTest {
         Assertions.assertTrue(m.get().length() < stripped.length(),
                 "extracted method must be shorter than the whole class");
     }
+
+    // === Fix Round 1: 字符串/注释/换行签名 ===
+
+    @Test
+    void string_literal_with_braces_does_not_break_extraction() {
+        String src = "class A { void foo() { String s = \"{x}\"; return; } void bar() {} }";
+        Optional<String> m = DecompilerUtils.extractMethod(src, "foo");
+        Assertions.assertTrue(m.isPresent());
+        Assertions.assertTrue(m.get().contains("foo("), "got: " + m.get());
+        Assertions.assertFalse(m.get().contains("bar"), "must not swallow next method; got: " + m.get());
+    }
+
+    @Test
+    void comment_with_brace_does_not_break_extraction() {
+        String src = "class A { void foo() { /* ignore { brace */ return; } void bar() {} }";
+        Optional<String> m = DecompilerUtils.extractMethod(src, "foo");
+        Assertions.assertTrue(m.isPresent());
+        Assertions.assertTrue(m.get().contains("foo("), "got: " + m.get());
+        Assertions.assertFalse(m.get().contains("bar"), "must not swallow next method; got: " + m.get());
+    }
+
+    @Test
+    void multi_line_signature_is_matched() {
+        String src = "class A {\n  public <T extends Comparable<T>>\n    int foo(T x) { return 0; }\n  void bar() {}\n}";
+        Optional<String> m = DecompilerUtils.extractMethod(src, "foo");
+        Assertions.assertTrue(m.isPresent(), "should match multi-line generic signature; got empty");
+        Assertions.assertTrue(m.get().contains("foo(T x)"), "got: " + m.get());
+        Assertions.assertFalse(m.get().contains("bar"), "must not swallow next method; got: " + m.get());
+    }
+
+    @Test
+    void char_literal_with_closing_brace_inside_does_not_break_extraction() {
+        String src = "class A { void foo() { char c = '}'; return; } void bar() {} }";
+        Optional<String> m = DecompilerUtils.extractMethod(src, "foo");
+        Assertions.assertTrue(m.isPresent(), "got: " + m.orElse("<empty>"));
+        Assertions.assertFalse(m.get().contains("bar"), "got: " + m.get());
+    }
+
+    @Test
+    void escaped_quote_in_string_does_not_break_extraction() {
+        String src = "class A { void foo() { String s = \"a \\\"b {c}\\\" d\"; return; } void bar() {} }";
+        Optional<String> m = DecompilerUtils.extractMethod(src, "foo");
+        Assertions.assertTrue(m.isPresent(), "got: " + m.orElse("<empty>"));
+        Assertions.assertFalse(m.get().contains("bar"), "got: " + m.get());
+    }
 }
