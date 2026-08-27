@@ -17,6 +17,7 @@ import cn.wubo.method.trace.log.store.NoOpTraceStore;
 import cn.wubo.method.trace.log.utils.DecompilerUtils;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.Cookie;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -28,8 +29,10 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.function.HandlerFunction;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.RouterFunctions;
+import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 
 import java.util.List;
@@ -39,6 +42,7 @@ import java.util.Map;
 @EnableAspectJAutoProxy
 @ConditionalOnExpression("${method-trace-log.log.enable:true}")
 @EnableConfigurationProperties(MethodTraceLogProperties.class)
+@Slf4j
 public class LogConfig {
 
     @Bean
@@ -173,7 +177,33 @@ public class LogConfig {
         commonRouter(builder, callServiceStrategy, simpleMonitorService);
         authRouter(builder, properties, sessionService);
         decompileRouter(builder, properties);
-        return builder.build();
+        RouterFunction<ServerResponse> built = builder.build();
+        return built.filter(this::handleErrors);
+    }
+
+    /**
+     * RouterFunction 统一异常映射：
+     *  - {@link ResponseStatusException} 原样透传（已经表达了正确的 4xx）
+     *  - {@link IllegalArgumentException} → 400 bad_request
+     *  - 其他 {@link Exception}          → 500 internal_error（带异常类名便于诊断）
+     * <p>
+     * 通过 filter 而不是 handler 函数内 try/catch，让所有路由（含后续新增）共享同一套映射。
+     * <p>
+     * 实现成 {@link HandlerFilterFunction}：必须透传 {@code next.handle} 的返回值；
+     * 异常仍以 throw 形式抛出，由 Spring 的 DefaultHandlerExceptionResolver 统一翻译成响应体。
+     */
+    ServerResponse handleErrors(ServerRequest req, HandlerFunction<ServerResponse> next) throws Exception {
+        try {
+            return next.handle(req);
+        } catch (ResponseStatusException rse) {
+            throw rse;
+        } catch (IllegalArgumentException iae) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, iae.getMessage(), iae);
+        } catch (Exception e) {
+            log.error("methodTraceLog router error: {} {}", req.method(), req.uri(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "internal_error: " + e.getClass().getSimpleName(), e);
+        }
     }
 
     /**
@@ -296,7 +326,11 @@ public class LogConfig {
         });
         builder.GET("/methodTraceLog/view/traceid", request -> {
                     String id = request.param("id").orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "id is required"));
-                    return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(simpleMonitorService.getByTraceId(id));
+                    var trace = simpleMonitorService.getByTraceId(id);
+                    if (trace == null) {
+                        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "trace not found: " + id);
+                    }
+                    return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(trace);
                 }
         );
         // /view/export?format=json|csv  导出最近根 trace 列表

@@ -8,6 +8,7 @@ import cn.wubo.method.trace.log.file.dto.LogQueryRequestValidator;
 import cn.wubo.method.trace.log.utils.ValidationUtils;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -21,8 +22,11 @@ import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.stereotype.Controller;
+import org.springframework.web.servlet.function.HandlerFilterFunction;
+import org.springframework.web.servlet.function.HandlerFunction;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.RouterFunctions;
+import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -41,6 +45,7 @@ import static org.springframework.web.servlet.function.RequestPredicates.accept;
 @EnableWebSocketMessageBroker
 @ConditionalOnExpression("${method-trace-log.file.enable:true}")
 @EnableConfigurationProperties(MethodTraceLogProperties.class)
+@Slf4j
 public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
 
     /**
@@ -127,7 +132,28 @@ public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
             return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(logFileRealTimeService.stopMonitoring(fileName));
         });
         builder.GET("/methodTraceLog/logFile/monitor/status", request -> ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(logFileRealTimeService.getMonitorStatus()));
-        return builder.build();
+        RouterFunction<ServerResponse> built = builder.build();
+        return built.filter(this::handleErrors);
+    }
+
+    /**
+     * 与 {@link LogConfig#handleErrors} 对齐的兜底映射。
+     * <p>
+     * LogFileConfig 已对 /logFile/query 和 /logFile/download 显式 try/catch 输出 JSON 错误体，
+     * 但 monitor/start 等端点没有；这里给整条 router 套一层兜底，保证响应格式与 LogConfig 一致。
+     */
+    ServerResponse handleErrors(ServerRequest req, HandlerFunction<ServerResponse> next) throws Exception {
+        try {
+            return next.handle(req);
+        } catch (ResponseStatusException rse) {
+            throw rse;
+        } catch (IllegalArgumentException iae) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, iae.getMessage(), iae);
+        } catch (Exception e) {
+            log.error("methodTraceLog file router error: {} {}", req.method(), req.uri(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "internal_error: " + e.getClass().getSimpleName(), e);
+        }
     }
 
     @Controller
