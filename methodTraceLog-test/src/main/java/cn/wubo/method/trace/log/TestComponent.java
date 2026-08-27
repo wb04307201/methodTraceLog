@@ -70,4 +70,13 @@ public class TestComponent {
         return "internal-" + name;
     }
 
+    /**
+     * 真实方法名 internalImplMethodThrowing，但 trace 中显示为 "renamedThrowing"。
+     * 抛异常可触发 AlertingService 告警，验证告警里的 methodName 是重命名后的值。
+     */
+    @AspectLog("renamedThrowing")
+    public String internalImplMethodThrowing(String name) {
+        throw new RuntimeException("renamedThrowing 自爆：" + name);
+    }
+
 }

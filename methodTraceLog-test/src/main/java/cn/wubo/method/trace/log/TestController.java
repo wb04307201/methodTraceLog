@@ -56,6 +56,16 @@ public class TestController {
         return testComponent.internalImplMethod(name == null ? "world" : name);
     }
 
+    @GetMapping("/aspectLogRenamedThrow")
+    public String aspectLogRenamedThrow(@RequestParam(value = "name", required = false) String name) {
+        // 内部方法总是抛异常，让外层 LogAspect 抓到 AFTER_THROW
+        try {
+            return testComponent.internalImplMethodThrowing(name == null ? "world" : name);
+        } catch (RuntimeException e) {
+            throw e;
+        }
+    }
+
     @PostMapping("/post")
     public ResponseEntity<Map<String, String>> post(@RequestBody Map<String, String> map) {
         return ResponseEntity.ok().body(map);
