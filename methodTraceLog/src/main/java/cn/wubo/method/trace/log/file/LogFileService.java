@@ -50,7 +50,7 @@ public class LogFileService {
     /**
      * 获取日志文件列表
      *
-     * @return 日志文件信息列表，每个元素包含文件名、大小、最后修改时间和可读性信息
+     * @return 日志文件信息列表，每个元素包含文件名、大小、人类可读大小、最后修改时间和可读性信息
      */
     public List<Map<String, Object>> getLogFiles() {
         File logDir = new File(properties.getLogPath());
@@ -64,12 +64,39 @@ public class LogFileService {
 
         return Arrays.stream(files)
                 .filter(this::isValidFileExtensions)
-                .map(file -> Map.<String, Object>of(
-                        "name", file.getName(),
-                        "size", file.length(),
-                        "lastModified", file.lastModified(),
-                        "readable", file.canRead()))
+                .map(file -> {
+                    long bytes = file.length();
+                    Map<String, Object> m = new java.util.LinkedHashMap<>();
+                    m.put("name", file.getName());
+                    m.put("size", bytes);
+                    m.put("humanReadableSize", formatSize(bytes));
+                    m.put("lastModified", file.lastModified());
+                    m.put("readable", file.canRead());
+                    return m;
+                })
                 .toList();
+    }
+
+    /**
+     * 把字节数渲染为人类可读字符串。
+     * <p>
+     * 单位从 B → KB → MB → GB → TB 自动升级，保留 1 位小数；不足 1KB 的按整数字节输出。
+     *
+     * @param bytes 文件字节数（≥0）
+     * @return 例如 "1 B" / "1.0 KB" / "1.5 MB" / "150.5 GB"
+     */
+    public static String formatSize(long bytes) {
+        if (bytes < 1024L) {
+            return bytes + " B";
+        }
+        String[] units = {"KB", "MB", "GB", "TB"};
+        double v = bytes / 1024.0;
+        int u = 0;
+        while (v >= 1024.0 && u < units.length - 1) {
+            v /= 1024.0;
+            u++;
+        }
+        return String.format("%.1f %s", v, units[u]);
     }
 
 
