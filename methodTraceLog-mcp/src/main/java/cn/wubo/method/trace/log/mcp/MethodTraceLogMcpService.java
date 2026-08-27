@@ -23,6 +23,8 @@ import java.util.Optional;
  *   <li>{@link #setCallServiceEnable} 启用/停用某个日志服务</li>
  *   <li>{@link #getMethodTraceList} 获取最近的方法调用追踪列表</li>
  *   <li>{@link #getMethodTraceByTraceId} 根据 traceId 拉取完整调用链</li>
+ *   <li>{@link #getAlerts} 获取主机近期触发的告警事件</li>
+ *   <li>{@link #getSlowMethods} 获取主机上调用最慢的方法 Top-N</li>
  *   <li>{@link #decompileMethod} 反编译指定类的指定方法</li>
  *   <li>{@link #getLogFiles} 列出日志目录下的文件</li>
  *   <li>{@link #queryLogContent} 按条件查询日志行</li>
@@ -125,6 +127,32 @@ public class MethodTraceLogMcpService {
         if (host.isEmpty()) return "主机不存在";
         return doGet(host.get(),
                 "/methodTraceLog/view/traceid?id=" + url(traceId),
+                String.class);
+    }
+
+    // ===================== 告警与慢方法维度 =====================
+
+    @Tool(description = "获取主机近期触发的告警事件。返回按时间倒序。")
+    public String getAlerts(
+            @ToolParam(description = "主机名称") String hostName,
+            @ToolParam(description = "可选：最多返回多少条，默认 50", required = false) Integer limit) {
+        Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
+        if (host.isEmpty()) return "主机不存在";
+        int n = limit == null ? 50 : Math.max(1, Math.min(500, limit));
+        return doGet(host.get(), "/methodTraceLog/view/alerts?limit=" + n, String.class);
+    }
+
+    @Tool(description = "获取主机上调用最慢的方法 Top-N（基于 Micrometer Timer 直方图，包含 p50/p95/p99/max）。")
+    public String getSlowMethods(
+            @ToolParam(description = "主机名称") String hostName,
+            @ToolParam(description = "可选：统计窗口（分钟），默认 5", required = false) Integer windowMinutes,
+            @ToolParam(description = "可选：返回前 N 条，默认 10，最大 100", required = false) Integer topN) {
+        Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
+        if (host.isEmpty()) return "主机不存在";
+        int w = windowMinutes == null ? 5 : Math.max(1, Math.min(60, windowMinutes));
+        int n = topN == null ? 10 : Math.max(1, Math.min(100, topN));
+        return doGet(host.get(),
+                "/methodTraceLog/view/slowMethods?windowMinutes=" + w + "&topN=" + n,
                 String.class);
     }
 
