@@ -10,7 +10,7 @@ import java.util.*;
 
 /**
  * 顶层配置：根前缀 {@code method-trace-log}。
- * 包含 6 个嵌套组：log / file / security / decompile / otel / propagate。
+ * 包含 7 个嵌套组：log / file / security / decompile / otel / propagate / alerting。
  * 默认实例化所有非空子组，用户在 application.yml 里只覆盖需要改的字段即可。
  */
 @Data
@@ -48,6 +48,12 @@ public class MethodTraceLogProperties {
      */
     @NestedConfigurationProperty
     private PropagateProperties propagate = new PropagateProperties();
+
+    /**
+     * 异常告警配置：滑动窗口错误阈值 + cooldown + webhook 推送。默认关闭。
+     */
+    @NestedConfigurationProperty
+    private AlertingProperties alerting = new AlertingProperties();
 
     /**
      * AOP 切面与 ICallService 启用配置：总开关、采样率、trace 持久化、初始服务列表。
@@ -268,5 +274,51 @@ public class MethodTraceLogProperties {
          * 用户需要主动把它设置到自己的 RestTemplate 上。
          */
         private boolean restTemplateInterceptor = true;
+    }
+
+    /**
+     * 异常告警配置：同一 {@code className#methodName} 在滑动窗口内错误数达到阈值即触发一次告警，
+     * 触发后进入 cooldown 抑制抖动风暴。默认 {@code enable=false}，必须显式 opt-in。
+     */
+    @Data
+    public static class AlertingProperties {
+
+        /**
+         * 告警总开关。false（默认）时 AlertingService 不注册，consumer 也直接短路。
+         */
+        private boolean enable = false;
+
+        /**
+         * Webhook 接收地址。空字符串 = 不实际发送，只记本地日志 + ring buffer。
+         */
+        private String webhookUrl = "";
+
+        /**
+         * 触发告警的阈值。同一 className#methodName 在窗口内错误数 ≥ errorCount 触发。
+         */
+        private Threshold threshold = new Threshold();
+
+        /**
+         * 同 className#methodName 在 cooldown 内不重复告警，避免抖动风暴。
+         */
+        private long cooldownSeconds = 300L;
+
+        /**
+         * 白名单：仅对这些类（前缀匹配）告警。null / empty = 全部类都告警。
+         */
+        private List<String> classes = new ArrayList<>();
+
+        /**
+         * 滑动窗口阈值：窗口长度 + 窗口内错误数下限。
+         */
+        @Data
+        public static class Threshold {
+
+            /** 窗口内错误数达到该值触发告警。 */
+            private int errorCount = 10;
+
+            /** 滑动窗口长度（秒）。 */
+            private long windowSeconds = 60L;
+        }
     }
 }
