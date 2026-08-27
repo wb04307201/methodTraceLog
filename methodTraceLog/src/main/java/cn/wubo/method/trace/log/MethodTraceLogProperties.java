@@ -149,6 +149,16 @@ public class MethodTraceLogProperties {
          * 日志文件匹配模式
          */
         private String logPattern = "(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+\\[([^\\]]+)\\]\\s+(\\w+)\\s+([^\\s]+)\\s*-\\s*(.*)";
+
+        /**
+         * 单个日志文件最大尺寸，支持 B/KB/MB/GB。null = 不限制（保留兼容）。
+         */
+        private String maxFileSize = "100MB";
+
+        /**
+         * 该目录下所有滚动日志总大小上限，支持 B/KB/MB/GB。null = 不限制。
+         */
+        private String totalSizeCap = "10GB";
     }
 
     /**
