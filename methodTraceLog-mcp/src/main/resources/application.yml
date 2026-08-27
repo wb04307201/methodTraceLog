@@ -6,7 +6,7 @@ spring:
     mcp:
       server:
         name: methodTraceLog-mcp-server
-        version: 1.0.20
+        version: @project.version@
 
 # Hosts to expose to AI agents. Each host must be a running Spring Boot app
 # that has the methodTraceLog-spring-boot-starter on the classpath.
