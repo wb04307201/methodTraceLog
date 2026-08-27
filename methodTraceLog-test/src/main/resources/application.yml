@@ -29,6 +29,6 @@ management:
   endpoints:
     web:
       exposure:
-        include: methodtrace
+        include: methodtrace,health,metrics
 server:
   port: 8085
