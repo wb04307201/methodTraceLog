@@ -4,6 +4,7 @@ import cn.wubo.method.trace.log.CallServiceStrategy;
 import cn.wubo.method.trace.log.ICallService;
 import cn.wubo.method.trace.log.LogAspect;
 import cn.wubo.method.trace.log.MethodTraceLogProperties;
+import cn.wubo.method.trace.log.alerting.AlertingService;
 import cn.wubo.method.trace.log.impl.log.SimpleLogServiceImpl;
 import cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint;
 import cn.wubo.method.trace.log.impl.monitor.SimpleMonitorServiceImpl;
@@ -29,12 +30,14 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.servlet.function.HandlerFunction;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.RouterFunctions;
 import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 
@@ -112,6 +115,20 @@ public class LogConfig {
     @Bean
     public LogAspect logAspect(CallServiceStrategy callServiceStrategy, Sampler sampler) {
         return new LogAspect(callServiceStrategy, sampler);
+    }
+
+    /**
+     * 异常告警服务。仅当 {@code method-trace-log.alerting.enable=true} 时注册。
+     * <p>
+     * 用 {@code @Bean} 显式注册（而不是让 {@code @Component} 扫描）是为了注入构造参数：
+     * AlertingProperties + RestClient + Clock。注册后会被 {@link CallServiceStrategy}
+     * 自动收进 ICallService 列表。
+     */
+    @Bean
+    @ConditionalOnExpression("${method-trace-log.alerting.enable:false}")
+    public AlertingService alertingService(MethodTraceLogProperties properties) {
+        RestClient client = RestClient.create();
+        return new AlertingService(properties.getAlerting(), client, Clock.systemUTC());
     }
 
     /**
