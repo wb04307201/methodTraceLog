@@ -4,6 +4,7 @@ import cn.wubo.method.trace.log.MethodTraceLogProperties;
 import cn.wubo.method.trace.log.file.LogFileRealTimeService;
 import cn.wubo.method.trace.log.file.LogFileService;
 import cn.wubo.method.trace.log.file.dto.LogQueryRequest;
+import cn.wubo.method.trace.log.file.dto.LogQueryRequestValidator;
 import cn.wubo.method.trace.log.utils.ValidationUtils;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
@@ -85,12 +86,13 @@ public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
             try {
                 LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
                 ValidationUtils.validate(validator, logQueryRequest);
+                LogQueryRequestValidator.validate(logQueryRequest);
                 return ServerResponse.ok().body(fileService.queryLogs(logQueryRequest));
             } catch (ConstraintViolationException e) {
                 // 字段校验失败(fileName 为空等)→ 400 + 真实原因
                 return ServerResponse.badRequest().body(Map.of(ERROR, "validation_failed", MESSAGE, e.getMessage()));
             } catch (IllegalArgumentException e) {
-                // 文件不存在 / 路径非法 / 扩展名不允许 → 400 + 真实原因
+                // 文件不存在 / 路径非法 / 扩展名不允许 / 时间顺序非法 → 400 + 真实原因
                 return ServerResponse.badRequest().body(Map.of(ERROR, "bad_request", MESSAGE, e.getMessage()));
             } catch (Exception e) {
                 return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(ERROR, "internal_error", MESSAGE, e.getMessage()));
@@ -100,6 +102,7 @@ public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
             try {
                 LogQueryRequest logQueryRequest = request.body(LogQueryRequest.class);
                 ValidationUtils.validate(validator, logQueryRequest);
+                LogQueryRequestValidator.validate(logQueryRequest);
                 return ServerResponse.ok().contentType(MediaType.APPLICATION_OCTET_STREAM).header("Content-Disposition", "attachment;filename=" +  URLEncoder.encode(logQueryRequest.getFileName(), StandardCharsets.UTF_8)).build((req, res) -> {
                     try (PrintWriter writer = res.getWriter()) {
                         for (String line : fileService.downloadLog(logQueryRequest)) {
