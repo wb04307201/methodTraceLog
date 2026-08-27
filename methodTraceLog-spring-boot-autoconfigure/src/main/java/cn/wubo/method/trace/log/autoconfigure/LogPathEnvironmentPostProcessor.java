@@ -4,13 +4,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.env.EnvironmentPostProcessor;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.env.MapPropertySource;
-import org.springframework.core.env.PropertySource;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 
 /**
  * 把 {@code method-trace-log.file.log-path} 解析为绝对路径，并在目录不可写时让应用启动失败。
@@ -21,9 +18,10 @@ import java.util.Map;
  * 路径解析使用 {@code user.dir}（来自 environment，若未设置则回退到 {@code System.getProperty("user.dir")}），
  * 避免直接调用 {@code new File(".").getAbsoluteFile()} 这种不经过 ENV 的写法。
  * <p>
- * 写回 environment 时，会同时更新 {@code systemProperties} 与 {@code defaultProperties}：
- * 前者是默认回退位置（命令行 {@code -D...} / 系统属性），后者覆盖通过 {@code SpringApplication.setDefaultProperties(...)}
- * 设置的属性（它的优先级高于 systemProperties）。
+ * 写回 environment：把解析后的绝对路径写入 {@code systemProperties}。在 {@code MutablePropertySources} 里，
+ * {@code systemProperties} 是由 {@code StandardEnvironment} 构造函数第一个放入的属性源（index 0 = 最高优先级），
+ * 因此 {@code Environment.getProperty(KEY)} 会优先读到解析后的绝对路径，无视该值来自 application.yml、
+ * {@code SpringApplication.setDefaultProperties(...)} 还是命令行 {@code -D...}。
  */
 public class LogPathEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
@@ -46,18 +44,9 @@ public class LogPathEnvironmentPostProcessor implements EnvironmentPostProcessor
             throw new IllegalStateException(
                     "method-trace-log.file.log-path 不可写: " + path + " (" + e.getMessage() + ")", e);
         }
-        String resolved = path.toString();
-        // 默认回退位置（systemProperties 永远存在）
-        env.getSystemProperties().put(KEY, resolved);
-        // 显式覆盖 setDefaultProperties(...) 注入的属性源 —— 它优先级高于 systemProperties，
-        // 不更新的话 Environment.getProperty(KEY) 仍会读到原始的相对路径。
-        PropertySource<?> defaultProps = env.getPropertySources().get("defaultProperties");
-        if (defaultProps instanceof MapPropertySource mps) {
-            Object source = mps.getSource();
-            if (source instanceof Map<?, ?> map) {
-                ((Map<String, Object>) map).put(KEY, resolved);
-            }
-        }
+        // systemProperties 是 MutablePropertySources 中索引为 0 的属性源（最高优先级），
+        // 写入即可让 Environment.getProperty(KEY) 始终返回解析后的绝对路径。
+        env.getSystemProperties().put(KEY, path.toString());
     }
 
     @Override
