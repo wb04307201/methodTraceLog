@@ -4,7 +4,9 @@ import cn.wubo.method.trace.log.CallServiceStrategy;
 import cn.wubo.method.trace.log.ICallService;
 import cn.wubo.method.trace.log.LogAspect;
 import cn.wubo.method.trace.log.MethodTraceLogProperties;
+import cn.wubo.method.trace.log.alerting.AlertEvent;
 import cn.wubo.method.trace.log.alerting.AlertingService;
+import cn.wubo.method.trace.log.analyze.SlowMethodAnalyzer;
 import cn.wubo.method.trace.log.impl.log.SimpleLogServiceImpl;
 import cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint;
 import cn.wubo.method.trace.log.impl.monitor.SimpleMonitorServiceImpl;
@@ -40,6 +42,7 @@ import org.springframework.web.servlet.function.ServerResponse;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @AutoConfiguration
 @EnableAspectJAutoProxy
@@ -187,11 +190,20 @@ public class LogConfig {
         return new TraceContextRestTemplateInterceptor();
     }
 
+    /**
+     * 慢方法聚合器：从 Micrometer registry 读 {@code method.execution.time} Timer。
+     * 无条件注册（纯读取，无副作用），端点在告警关闭时也能用。
+     */
+    @Bean
+    public SlowMethodAnalyzer slowMethodAnalyzer(MeterRegistry meterRegistry) {
+        return new SlowMethodAnalyzer(meterRegistry);
+    }
+
     @Bean("wb04307201MethodTraceLogRouter")
-    public RouterFunction<ServerResponse> methodTraceLogRouter(CallServiceStrategy callServiceStrategy, SimpleMonitorServiceImpl simpleMonitorService, MethodTraceLogProperties properties, MtlSessionService sessionService) {
+    public RouterFunction<ServerResponse> methodTraceLogRouter(CallServiceStrategy callServiceStrategy, SimpleMonitorServiceImpl simpleMonitorService, MethodTraceLogProperties properties, MtlSessionService sessionService, Optional<AlertingService> alertingService, SlowMethodAnalyzer slowMethodAnalyzer) {
         RouterFunctions.Builder builder = RouterFunctions.route();
         builder.GET("/methodTraceLog/panel", request -> ServerResponse.ok().contentType(MediaType.TEXT_HTML).body(new ClassPathResource(("/panel.html"))));
-        commonRouter(builder, callServiceStrategy, simpleMonitorService);
+        commonRouter(builder, callServiceStrategy, simpleMonitorService, alertingService, slowMethodAnalyzer);
         authRouter(builder, properties, sessionService);
         decompileRouter(builder, properties);
         RouterFunction<ServerResponse> built = builder.build();
@@ -320,7 +332,7 @@ public class LogConfig {
         });
     }
 
-    private void commonRouter(RouterFunctions.Builder builder, CallServiceStrategy callServiceStrategy, SimpleMonitorServiceImpl simpleMonitorService) {
+    private void commonRouter(RouterFunctions.Builder builder, CallServiceStrategy callServiceStrategy, SimpleMonitorServiceImpl simpleMonitorService, Optional<AlertingService> alertingServiceOpt, SlowMethodAnalyzer slowMethodAnalyzer) {
         builder.GET("/methodTraceLog/view/callServices", request -> ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(callServiceStrategy.getCallServices()));
         builder.GET("/methodTraceLog/view/callService", request -> {
                     String name = request.param("name").orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "name is required"));
@@ -366,6 +378,22 @@ public class LogConfig {
                         .body(csv);
             }
             return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(data);
+        });
+
+        // /view/alerts?limit=50  最近告警事件；alerting 未启用时返回空 list（不 404）
+        builder.GET("/methodTraceLog/view/alerts", request -> {
+            int limit = Math.max(1, Math.min(100, parseIntSafe(request.param("limit").orElse("50"), 50)));
+            List<AlertEvent> events = alertingServiceOpt
+                    .map(svc -> svc.getRecent(limit))
+                    .orElseGet(List::of);
+            return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(events);
+        });
+
+        // /view/slowMethods?windowMinutes=5&topN=10  最慢方法 topN
+        builder.GET("/methodTraceLog/view/slowMethods", request -> {
+            int windowMin = Math.max(1, parseIntSafe(request.param("windowMinutes").orElse("5"), 5));
+            int topN = Math.max(1, Math.min(200, parseIntSafe(request.param("topN").orElse("10"), 10)));
+            return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(slowMethodAnalyzer.analyze(windowMin, topN));
         });
 
     }
