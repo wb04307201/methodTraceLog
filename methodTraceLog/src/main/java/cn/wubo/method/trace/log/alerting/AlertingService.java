@@ -17,6 +17,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 异常告警 {@code ICallService}：只关心 {@link LogActionEnum#AFTER_THROW} 事件。
@@ -52,6 +54,17 @@ public class AlertingService extends AbstractCallService {
 
     /** {@code className#methodName} → 上次告警时间戳（cooldown 起点）。 */
     private final Map<String, Long> cooldownUntil = new ConcurrentHashMap<>();
+
+    /**
+     * 专用 webhook 投递线程池。daemon + cached：不阻塞 Tomcat 请求线程，每个 webhook 单独跑。
+     * 之所以不能直接用 RestClient 同步调：JDK HttpClient 默认无限超时，
+     * 当 webhook URL 指向 host 自身时会产生「所有 Tomcat 线程都在等自己回 webhook 请求」的活锁。
+     */
+    private static final ExecutorService WEBHOOK_EXECUTOR = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "mtl-alerting-webhook");
+        t.setDaemon(true);
+        return t;
+    });
 
     public AlertingService(MethodTraceLogProperties.AlertingProperties props, RestClient webhookClient, Clock clock) {
         this.props = props;
@@ -118,7 +131,11 @@ public class AlertingService extends AbstractCallService {
     }
 
     /**
-     * best-effort webhook POST。未配置 url 时只打一条 warn。任何异常都被吞掉。
+     * best-effort webhook POST。**异步 + 3s 超时**，绝不阻塞 consumer() 调用方。
+     * <p>
+     * 历史教训：用 RestClient 同步调 + JDK HttpClient 默认无限超时，
+     * 当 webhook URL 指向 host 自身时高并发会把所有 Tomcat 请求线程活锁（Phase A 发现）。
+     * 现在投递跑在专用 daemon 线程池上，3s 超时后丢弃，业务路径 0 阻塞。
      *
      * @param event 待推送的事件
      */
@@ -129,6 +146,13 @@ public class AlertingService extends AbstractCallService {
                     event.getClassName(), event.getMethodName(), event.getErrorCount());
             return;
         }
+        WEBHOOK_EXECUTOR.execute(() -> doPostWebhook(url, event));
+    }
+
+    /**
+     * 实际 POST。在 daemon 线程池中跑。任何异常 / 超时都只记 warn，绝不向上抛。
+     */
+    private void doPostWebhook(String url, AlertEvent event) {
         try {
             webhookClient.post()
                     .uri(url)
