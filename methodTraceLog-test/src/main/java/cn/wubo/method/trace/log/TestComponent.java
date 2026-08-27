@@ -61,4 +61,13 @@ public class TestComponent {
         return "hello " + name;
     }
 
+    /**
+     * 真实方法名是 internalImplMethod，但 trace 中显示为 "renamedInTrace"。
+     * 调用方完全无感知 —— 走 AOP 重写 methodName。
+     */
+    @AspectLog("renamedInTrace")
+    public String internalImplMethod(String name) {
+        return "internal-" + name;
+    }
+
 }

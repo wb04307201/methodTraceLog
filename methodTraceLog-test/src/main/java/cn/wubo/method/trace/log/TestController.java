@@ -48,6 +48,12 @@ public class TestController {
         return testComponent.aspectLogDemo(name == null ? "world" : name);
     }
 
+    @GetMapping("/aspectLogRenamed")
+    public String aspectLogRenamed(@RequestParam(value = "name", required = false) String name) {
+        // 调用方看到的是 internalImplMethod，但 trace 中显示为 "renamedInTrace"
+        return testComponent.internalImplMethod(name == null ? "world" : name);
+    }
+
     @PostMapping("/post")
     public ResponseEntity<Map<String, String>> post(@RequestBody Map<String, String> map) {
         return ResponseEntity.ok().body(map);
