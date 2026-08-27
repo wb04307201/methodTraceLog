@@ -4,6 +4,15 @@ method-trace-log:
     serviceCalls: # 启动时便开启的日志服务，默认无需配置全部开启，生产环境可以配置全部关闭，在需要时可通过web界面开启
       - name: CustomLog  # 日志输出服务
         enable: false
+      - name: AlertingService  # 异常告警（test app 演示开启）
+        enable: true
+  alerting:
+    enable: true
+    webhook-url: http://localhost:8085/test/_test/echo-webhook
+    threshold:
+      error-count: 3
+      window-seconds: 30
+    cooldown-seconds: 0
   file:
     enable: true        # 是否启用文件相关功能，默认true
     path: ./logs        # 日志文件路径，默认为项目根目录下的logs文件夹

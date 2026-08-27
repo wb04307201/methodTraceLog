@@ -8,7 +8,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static java.lang.Thread.sleep;
 
@@ -74,5 +76,25 @@ public class TestController {
         response.put("description", description);
         response.put("uri", req.getRequestURI());
         return ResponseEntity.ok().body(response);
+    }
+
+    // ===== 告警 e2e 测试辅助 =====
+    private final List<Map<String, Object>> echoWebhookReceived = new CopyOnWriteArrayList<>();
+
+    @PostMapping("/_test/echo-webhook")
+    public ResponseEntity<Void> echoWebhook(@RequestBody Map<String, Object> body) {
+        echoWebhookReceived.add(body);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/_test/echo-webhook")
+    public List<Map<String, Object>> listReceived() {
+        return echoWebhookReceived;
+    }
+
+    @DeleteMapping("/_test/echo-webhook")
+    public ResponseEntity<Void> clearReceived() {
+        echoWebhookReceived.clear();
+        return ResponseEntity.ok().build();
     }
 }
