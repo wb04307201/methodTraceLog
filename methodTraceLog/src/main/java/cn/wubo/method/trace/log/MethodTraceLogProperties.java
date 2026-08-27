@@ -168,7 +168,7 @@ public class MethodTraceLogProperties {
     }
 
     /**
-     * 安全相关：API Key + 浏览器 cookie 会话配置。
+     * 安全相关：API Key + 浏览器 cookie 会话配置 + CORS 配置。
      */
     @Data
     public static class SecurityProperties {
@@ -182,6 +182,45 @@ public class MethodTraceLogProperties {
          * 浏览器端 cookie 会话配置。
          */
         private SessionProperties session = new SessionProperties();
+
+        /**
+         * 跨域配置：用于让方法追踪面板在不同 origin 部署时仍能调 API。
+         * 默认全部留空表示禁用（CorsFilter 不注册）。
+         */
+        @NestedConfigurationProperty
+        private CorsProperties cors = new CorsProperties();
+
+        /**
+         * CORS 配置。空 {@code allowedOrigins} = 完全禁用 CORS，CorsFilter 不会被注册。
+         */
+        @Data
+        public static class CorsProperties {
+            /**
+             * 允许的 origin 列表。{@code ["*"]} 表示全部允许（与 credentials 互斥）。
+             * 默认空列表 → CORS 关闭。
+             */
+            private List<String> allowedOrigins = new ArrayList<>();
+
+            /**
+             * 允许的 HTTP 方法。默认 GET/POST/OPTIONS/DELETE/PUT。
+             */
+            private List<String> allowedMethods = List.of("GET", "POST", "OPTIONS", "DELETE", "PUT");
+
+            /**
+             * 允许的请求头。默认 Content-Type + X-Api-Key + Authorization。
+             */
+            private List<String> allowedHeaders = List.of("Content-Type", "X-Api-Key", "Authorization");
+
+            /**
+             * 是否允许 credentials。与 {@code allowedOrigins=*} 互斥。默认 false。
+             */
+            private boolean allowCredentials = false;
+
+            /**
+             * preflight 缓存秒数。默认 0（不缓存，每次都走 preflight）。
+             */
+            private long maxAge = 0L;
+        }
     }
 
     /**
