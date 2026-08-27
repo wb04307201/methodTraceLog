@@ -1,10 +1,12 @@
 package cn.wubo.method.trace.log;
 
+import cn.wubo.method.trace.log.autoconfigure.TraceContextRestClientCustomizer;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
@@ -23,10 +25,14 @@ public class TestController {
 
     private final TestComponent testComponent;
 
+    private final TraceContextRestClientCustomizer traceContextCustomizer;
+
     @Autowired
-    public TestController(TestService testService, TestComponent testComponent) {
+    public TestController(TestService testService, TestComponent testComponent,
+                          TraceContextRestClientCustomizer traceContextCustomizer) {
         this.testService = testService;
         this.testComponent = testComponent;
+        this.traceContextCustomizer = traceContextCustomizer;
     }
 
 
@@ -64,6 +70,15 @@ public class TestController {
         } catch (RuntimeException e) {
             throw e;
         }
+    }
+
+    @GetMapping("/callRemote")
+    public String callRemote(@RequestParam("port") int port, @RequestParam("name") String name) {
+        // 用 starter 自带的 TraceContextRestClientCustomizer 注入 traceparent 出站头
+        RestClient.Builder builder = RestClient.builder();
+        traceContextCustomizer.customize(builder);
+        RestClient client = builder.baseUrl("http://localhost:" + port).build();
+        return client.get().uri("/test/aspectLog?name={n}", name).retrieve().body(String.class);
     }
 
     @PostMapping("/post")
