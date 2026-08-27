@@ -89,11 +89,32 @@ public class MethodTraceLogMcpService {
 
     // ===================== 方法追踪（trace）维度 =====================
 
-    @Tool(description = "获取最近的方法调用追踪记录列表（监控面板 list 视图）")
-    public String getMethodTraceList(@ToolParam(description = "主机名称") String hostName) {
+    @Tool(description = "获取最近的方法调用追踪记录列表。可按类名/方法名过滤，只看错误，限制返回数量。")
+    public String getMethodTraceList(
+            @ToolParam(description = "主机名称") String hostName,
+            @ToolParam(description = "可选：类名 substring 过滤（不区分大小写）", required = false) String className,
+            @ToolParam(description = "可选：方法名 substring 过滤（不区分大小写）", required = false) String methodName,
+            @ToolParam(description = "可选：true=只返回 AFTER_THROW 的 trace，默认 false", required = false) Boolean onlyErrors,
+            @ToolParam(description = "可选：最多返回多少条，默认 200，最大 2000", required = false) Integer limit) {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
-        return doGet(host.get(), "/methodTraceLog/view/list", String.class);
+        // 用 boolean[] 绕开 lambda 内的 effectively-final 限制
+        boolean[] first = {true};
+        StringBuilder sb = new StringBuilder("/methodTraceLog/view/list?");
+        if (className != null) appendQuery(sb, first, "className", className);
+        if (methodName != null) appendQuery(sb, first, "methodName", methodName);
+        if (onlyErrors != null) appendQuery(sb, first, "onlyErrors", onlyErrors.toString());
+        if (limit != null) appendQuery(sb, first, "limit", String.valueOf(Math.max(1, Math.min(2000, limit))));
+        return doGet(host.get(), sb.toString(), String.class);
+    }
+
+    /**
+     * 拼接 query string：首次不加 {@code &}，后续加。
+     */
+    private static void appendQuery(StringBuilder sb, boolean[] first, String key, String value) {
+        if (!first[0]) sb.append('&');
+        first[0] = false;
+        sb.append(key).append('=').append(url(value));
     }
 
     @Tool(description = "根据 traceId 拉取完整的方法调用链（span 树）")
