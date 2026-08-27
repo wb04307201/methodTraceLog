@@ -214,7 +214,7 @@ public class DecompilerUtils {
      * 再用大括号配对（跳过字符串 / 字符字面量 / 注释）确定 body 结束位置，
      * 比 CFR 自带的 {@code --methodname} 过滤更鲁棒（CFR 仍会输出整个类的壳和字段）。
      * <p>
-     * 切不到时返回 {@link Optional#empty()}，调用方应 fallback 到全量源码。
+     * 切不到时返回 {@link java.util.Optional#empty()}，调用方应 fallback 到全量源码。
      *
      * @param src        完整类源码（通常是 {@link #decompile} 的结果，可先过 {@link #removeAnnotations}）
      * @param methodName 目标方法名
