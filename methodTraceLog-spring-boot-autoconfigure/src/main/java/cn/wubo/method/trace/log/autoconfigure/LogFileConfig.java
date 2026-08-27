@@ -16,6 +16,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
@@ -93,6 +94,9 @@ public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
                 ValidationUtils.validate(validator, logQueryRequest);
                 LogQueryRequestValidator.validate(logQueryRequest);
                 return ServerResponse.ok().body(fileService.queryLogs(logQueryRequest));
+            } catch (HttpMessageNotReadableException e) {
+                // Jackson 反序列化失败（时间格式错误、JSON 语法错误等）→ 400 + 真实原因
+                return ServerResponse.badRequest().body(Map.of(ERROR, "bad_request", MESSAGE, rootCauseMessage(e)));
             } catch (ConstraintViolationException e) {
                 // 字段校验失败(fileName 为空等)→ 400 + 真实原因
                 return ServerResponse.badRequest().body(Map.of(ERROR, "validation_failed", MESSAGE, e.getMessage()));
@@ -116,6 +120,8 @@ public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
                     }
                     return null;
                 });
+            } catch (HttpMessageNotReadableException e) {
+                return ServerResponse.badRequest().body(Map.of(ERROR, "bad_request", MESSAGE, rootCauseMessage(e)));
             } catch (ConstraintViolationException e) {
                 return ServerResponse.badRequest().body(Map.of(ERROR, "validation_failed", MESSAGE, e.getMessage()));
             } catch (IllegalArgumentException e) {
@@ -232,4 +238,11 @@ public class LogFileConfig implements WebSocketMessageBrokerConfigurer {
         }
     }
 
+    private static String rootCauseMessage(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+        }
+        return cur.getMessage();
+    }
 }
