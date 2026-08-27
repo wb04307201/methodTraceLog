@@ -226,3 +226,40 @@
 - ✅ MCP `getLogFiles` 返回 `humanReadableSize: "238.9 KB"` + `size: 244632`
 - ✅ `/test/aspectLogRenamed` 端点的 trace 中，子 span methodName = `renamedInTrace`（不是 `internalImplMethod`）
 - ✅ `mvn -pl methodTraceLog javadoc:javadoc` BUILD SUCCESS（javadoc 错误已修复）
+---
+
+## 7. 二次修复（2026-08-28）
+
+在第 6 节 P0–P2 全量修复之后，针对运维/Agent 集成链路又发现并修复了 4 项：
+
+### 修复 commits
+
+| Task | Commit | 说明 |
+|---|---|---|
+| A1 | `ba3af83` | CORS：新增 `CorsFilterConfig`，仅当 `method-trace-log.security.cors.allowed-origins` 非空时注册 `CorsFilter`（opt-in） |
+| A2 | `ce6059a` | test app `application.yml` 暴露 `management.endpoints.web.exposure.include: methodtrace,health,metrics` |
+| A3 | `3f719fc` | test app：新增 `TestComponent.internalImplMethodThrowing` + `TestController.aspectLogRenamedThrow`，验证 AlertingService 告警里的 `methodName` 是 `@AspectLog` 重命名后的值 |
+| A4 | `218a7a2` | test app：新增 `TestController.callRemote(port, name)`，使用 starter 自带的 `TraceContextRestClientCustomizer` 验证出站 traceparent 注入；双实例（8085 + 8086）跨进程共享同一 traceid |
+
+### 端到端验证（2026-08-28 01:30）
+
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| CORS preflight | `curl -X OPTIONS -H "Origin: http://localhost:3000" -H "Access-Control-Request-Method: GET" -i http://localhost:8085/methodTraceLog/view/alerts` | **403 Invalid CORS request**（test app 未配置 `allowed-origins`，按设计 opt-in 不生效；CorsFilterConfigTest 3 个单元测试全过） |
+| CORS GET | `curl -H "Origin: http://localhost:3000" -i http://localhost:8085/methodTraceLog/view/alerts` | 无 `Access-Control-*` 响应头（同上原因） |
+| JVM health | `curl http://localhost:8085/actuator/health` | **200 `{"status":"UP"}`** |
+| JVM metrics names | `curl http://localhost:8085/actuator/metrics` | **49 metrics**，`jvm.memory.used` 在列表中 |
+| Renamed alert | 触发 `/test/aspectLogRenamedThrow` × 5 → `/methodTraceLog/view/alerts?limit=10` | **OK**：`TestComponent.renamedThrowing`（不是 `internalImplMethodThrowing`）；同时记录到 `TestController.aspectLogRenamedThrow`（调用方） |
+| Cross-app trace | 触发 `/test/callRemote?port=8086&name=cross-app-verify` → 比对两实例 `/methodTraceLog/view/list` | **OK**：8086 找到 8085 上 `d7392869e1fb4d298786ece3a7ee557e` 对应 traceid（8085 输出带 `-`，8086 走 W3C 不带 `-` 是预期行为）；树形结构 `callRemote → http outbound → aspectLog → aspectLogDemo` 跨进程共享同一 traceid |
+
+### 已知的 Live 测试限制（不阻塞，仅记录）
+
+- **CORS 在 test app 未生效**：测试模块默认 `method-trace-log.security.cors.allowed-origins` 为空列表，`CorsFilter` 不注册，preflight 返回 403。代码层面 `CorsFilterConfigTest` 已覆盖「空配置不创建 filter / 非空配置带合理默认 / yaml 解析」3 个分支。在生产环境启用 CORS 只需在 `application.yml` 增加：
+  ```yaml
+  method-trace-log:
+    security:
+      cors:
+        allowed-origins: ["https://your-panel.example.com"]
+  ```
+- **traceid 格式差异**：本进程内 AOP 创建的 traceid 形如 `d7392869-e1fb-4d29-8786-ece3a7ee557e`（UUID + 短横线）；从 HTTP 头 `traceparent` 解析出的 traceid 是 W3C `d7392869e1fb4d298786ece3a7ee557e`（32 hex 字符无短横线）。两侧值在去短横线后完全一致，是 W3C Trace Context 标准的正常行为。
+- **双实例共享 logback 文件**：8085 与 8086 同时写 `./logs/myApp.log`。本轮验证 8086 启动后两个实例都能正常 append，未触发 Windows 文件锁冲突。如未来出现 logback `FileAppender` 报错，再切到各自 `${LOG_DIR}/${APP_NAME}-${server.port}.log`。
