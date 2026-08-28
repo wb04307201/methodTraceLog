@@ -285,6 +285,9 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
     public Map<String, Object> stopMonitoring(String fileName) {
         monitoring = false;
         currentMonitorFile = null;
+        synchronized (filePositions) {
+            filePositions.clear();
+        }
         return Map.of("type", "monitor_stopped", MESSAGE, "已停止日志监控:" + fileName);
     }
 
