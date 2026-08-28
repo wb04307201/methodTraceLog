@@ -180,4 +180,60 @@ public class TestController {
         }
         return counters;
     }
+
+    @GetMapping("/slow")
+    public String slow(@RequestParam(value = "sleepMs", defaultValue = "2000") long sleepMs) {
+        try {
+            Thread.sleep(sleepMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        }
+        return "slow:done:" + sleepMs;
+    }
+
+    @GetMapping("/sampled")
+    public int sampled(@RequestParam(value = "iterations", defaultValue = "100") int iterations) {
+        for (int i = 0; i < iterations; i++) {
+            testService.add(i, i + 1);
+        }
+        return iterations;
+    }
+
+    @GetMapping("/throw")
+    public String throwN(@RequestParam(value = "n", defaultValue = "1") int n,
+                     @RequestParam(value = "message", defaultValue = "test-throw") String message) {
+        for (int i = 0; i < n; i++) {
+            throw new RuntimeException(message + ":" + i);
+        }
+        return "unreachable";
+    }
+
+    @GetMapping("/throw-from")
+    public String throwFrom(@RequestParam("class") String fqn,
+                        @RequestParam(value = "n", defaultValue = "1") int n) {
+        try {
+            Class<?> cls = Class.forName(fqn);
+            for (int i = 0; i < n; i++) {
+                throw (RuntimeException) cls.getDeclaredConstructor().newInstance();
+            }
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException("class not found: " + fqn, e);
+        }
+        return "unreachable";
+    }
+
+    @GetMapping("/cors-info")
+    public String corsInfo(HttpServletRequest req) {
+        return "cors:" + req.getHeader("Origin");
+    }
+
+    @GetMapping("/otel-out")
+    public String otelOut(@RequestParam("port") int port,
+                      @RequestParam(value = "name", defaultValue = "world") String name) {
+        RestClient.Builder builder = RestClient.builder();
+        traceContextCustomizer.customize(builder);
+        RestClient client = builder.baseUrl("http://localhost:" + port).build();
+        return client.get().uri("/test/aspectLog?name={n}", name).retrieve().body(String.class);
+    }
 }
