@@ -4,9 +4,11 @@ import cn.wubo.method.trace.log.autoconfigure.TraceContextRestClientCustomizer;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
@@ -27,12 +29,24 @@ public class TestController {
 
     private final TraceContextRestClientCustomizer traceContextCustomizer;
 
+    /** Spring Boot 自动配置的 builder；starter 的 RestTemplateCustomizer 已把 traceparent 拦截器挂上去了 */
+    private final RestTemplateBuilder restTemplateBuilder;
+
+    /** 注入两次拿到 prototype 范围内两个独立的 CGLIB 代理（见 TestLombokEntity 的 @Scope("prototype")） */
+    @Autowired
+    private TestLombokEntity testLombokEntity;
+
+    @Autowired
+    private TestLombokEntity testLombokEntity2;
+
     @Autowired
     public TestController(TestService testService, TestComponent testComponent,
-                          TraceContextRestClientCustomizer traceContextCustomizer) {
+                          TraceContextRestClientCustomizer traceContextCustomizer,
+                          RestTemplateBuilder restTemplateBuilder) {
         this.testService = testService;
         this.testComponent = testComponent;
         this.traceContextCustomizer = traceContextCustomizer;
+        this.restTemplateBuilder = restTemplateBuilder;
     }
 
 
@@ -81,6 +95,21 @@ public class TestController {
         return client.get().uri("/test/aspectLog?name={n}", name).retrieve().body(String.class);
     }
 
+    /**
+     * RestTemplate 版的出站传播验证端点。
+     * <p>
+     * 这里不手工 setInterceptors —— starter 注册的 RestTemplateCustomizer 已经把
+     * TraceContextRestTemplateInterceptor 挂在自动配置的 RestTemplateBuilder 上，
+     * 所以 build() 出来的 RestTemplate 天然会带 traceparent 出站头。
+     */
+    @GetMapping("/callRemoteRestTemplate")
+    public String callRemoteRestTemplate(@RequestParam("port") int port, @RequestParam("name") String name) {
+        RestTemplate restTemplate = restTemplateBuilder.build();
+        log.info("callRemoteRestTemplate interceptors={}", restTemplate.getInterceptors());
+        String url = "http://localhost:" + port + "/test/aspectLog?name=" + name;
+        return restTemplate.getForObject(url, String.class);
+    }
+
     @PostMapping("/post")
     public ResponseEntity<Map<String, String>> post(@RequestBody Map<String, String> map) {
         return ResponseEntity.ok().body(map);
@@ -121,5 +150,34 @@ public class TestController {
     public ResponseEntity<Void> clearReceived() {
         echoWebhookReceived.clear();
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 验证 blacklist（exclude-patterns）端点：
+     *  - equals/hashCode/toString 由 Lombok @Data 生成 — 应被黑名单排除
+     *  - describe/doWork 是用户自定义方法 — 应保留在 trace 中
+     */
+    @GetMapping("/blacklist")
+    public Map<String, Integer> blacklist() {
+        // 必须使用注入的代理引用 — 直接 new 出来的对象不走 CGLIB 代理，AOP 不会拦截。
+        cn.wubo.method.trace.log.TestLombokEntity a = testLombokEntity;
+        a.setName("alpha"); a.setValue(1);
+        cn.wubo.method.trace.log.TestLombokEntity b = testLombokEntity2;
+        b.setName("alpha"); b.setValue(1);
+
+        Map<String, Integer> counters = new java.util.HashMap<>();
+        for (int i = 0; i < 20; i++) {
+            a.equals(b);          // Lombok-generated — should be excluded
+            a.hashCode();         // Lombok-generated — should be excluded
+            a.toString();         // Lombok-generated — should be excluded
+            a.describe();         // user-defined — should appear in trace
+            a.doWork();           // user-defined — should appear in trace
+            counters.merge("equals", 1, Integer::sum);
+            counters.merge("hashCode", 1, Integer::sum);
+            counters.merge("toString", 1, Integer::sum);
+            counters.merge("describe", 1, Integer::sum);
+            counters.merge("doWork", 1, Integer::sum);
+        }
+        return counters;
     }
 }
