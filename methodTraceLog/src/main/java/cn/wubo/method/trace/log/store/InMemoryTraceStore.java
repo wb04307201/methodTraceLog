@@ -18,11 +18,30 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  * 写入不再需要拷贝整个底层数组，N 大时写入开销显著降低。
  * <p>
  * 写入时如果 traceId 已存在则覆盖（保持最新版本），避免出现孤儿根节点。
+ * <p>
+ * 通过构造参数 {@code maxTraces} 限制内存中保留的根 trace 数量；超出时按写入顺序淘汰最旧条目。
  */
 public class InMemoryTraceStore implements ITraceStore {
 
     private final Deque<MethodTraceInfo> roots = new ConcurrentLinkedDeque<>();
     private final Map<String, MethodTraceInfo> traceIdIndex = new ConcurrentHashMap<>();
+    private final int maxTraces;
+
+    /**
+     * 创建 InMemoryTraceStore。
+     *
+     * @param maxTraces 内存中保留的最大根 trace 数；{@code <= 0} 表示不限制（兼容旧用法）
+     */
+    public InMemoryTraceStore(int maxTraces) {
+        this.maxTraces = maxTraces;
+    }
+
+    /**
+     * 无参构造：保留最大根 trace 数 = Integer.MAX_VALUE（即不限制，兼容旧调用方）。
+     */
+    public InMemoryTraceStore() {
+        this(Integer.MAX_VALUE);
+    }
 
     @Override
     public void save(MethodTraceInfo root) {
@@ -36,6 +55,7 @@ public class InMemoryTraceStore implements ITraceStore {
             if (prev == null) {
                 // 最新在前
                 roots.addFirst(root);
+                evictIfNeeded();
                 return;
             }
             existing = prev;
@@ -44,6 +64,22 @@ public class InMemoryTraceStore implements ITraceStore {
         roots.remove(existing);
         roots.addFirst(root);
         traceIdIndex.put(traceid, root);
+        evictIfNeeded();
+    }
+
+    /**
+     * 超过 maxTraces 时淘汰最旧条目（队列尾部）。
+     */
+    private void evictIfNeeded() {
+        if (maxTraces <= 0) {
+            return;
+        }
+        while (roots.size() > maxTraces) {
+            MethodTraceInfo evicted = roots.pollLast();
+            if (evicted != null && evicted.getBefore() != null) {
+                traceIdIndex.remove(evicted.getBefore().getTraceid());
+            }
+        }
     }
 
     @Override

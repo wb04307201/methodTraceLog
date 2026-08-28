@@ -91,7 +91,7 @@ public class LogConfig {
                     ts.getMaxTraces(),
                     ts.isRebuildIndexOnStart());
             case "none" -> NoOpTraceStore.INSTANCE;
-            default -> new InMemoryTraceStore();
+            default -> new InMemoryTraceStore(ts.getMaxTraces());
         };
     }
 
