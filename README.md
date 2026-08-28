@@ -75,9 +75,10 @@ management:
 method-trace-log:
   log:
     enable: true                                  # AOP master switch
-    sample-rate: 1.0                              # 0.0 ~ 1.0; child spans inherit parent decision
+    sample-rate: 1.0                              # 0.0 ~ 1.0; child spans inherit parent decision (clamped on startup)
+    exclude-patterns: []                          # method-name blacklist (case-insensitive equals match); hit → proceed() directly, no events emitted. e.g. [equals, hashCode, toString, canEqual]
     service-calls:                                # start-up enable flags
-      - { name: CustomLog,         enable: false }   # 3 built-in services: SimpleLogService / SimpleMonitorService / CustomLog
+      - { name: CustomLog,         enable: false }   # built-in services: SimpleLogService / SimpleMonitorService / AlertingService / CustomLog
     trace-store:                                  # where the in-memory tree lives
       type: in-memory                             # in-memory | file | none
       path: ./trace-store                         # only when type=file (auto-creates yyyy-MM-dd subdirs)
@@ -89,11 +90,19 @@ method-trace-log:
     path: ./logs
     allowed-extensions: [.log, .txt, .out]
     scan-lines: 10000                             # stream-scan line cap; Files.lines() + limit() is lazy, so the file itself can be arbitrarily large — no size check
+    max-file-size: 100MB                          # per-file size cap (default; set to 0/null = no limit)
+    total-size-cap: 10GB                          # cumulative cap across all rolled files in the dir
     # log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
   security:
     api-key: change-me-in-production              # empty = no auth
     session:
       ttl-millis: 28800000                        # 8h sliding session for browser cookies
+    cors:                                         # CORS for browser panels on different origins (opt-in: empty allowed-origins = disabled)
+      allowed-origins: []                         # ["https://your-panel.example.com"]; ["*"] = all (incompatible with credentials)
+      allowed-methods: [GET, POST, OPTIONS, DELETE, PUT]
+      allowed-headers: [Content-Type, X-Api-Key, Authorization]
+      allow-credentials: false                    # true requires allowed-origins NOT be "*"
+      max-age: 0                                  # preflight cache seconds (0 = always re-validate)
   decompile:
     timeout-seconds: 10                           # CFR daemon-thread timeout
   otel:                                           # requires opentelemetry-sdk on classpath
@@ -109,7 +118,37 @@ method-trace-log:
     http-inbound: true                            # TraceContextFilter reads traceparent
     rest-client-outbound: true                    # RestClient.Builder interceptor
     rest-template-interceptor: true               # exposes a RestTemplate interceptor bean
+  alerting:                                       # exception alerting — opt-in; off by default
+    enable: false                                 # true registers AlertingService as an ICallService
+    webhook-url: ""                               # empty = log only; non-empty POSTs events (best-effort, async)
+    threshold:
+      error-count: 10                             # errors per class#method within window to fire
+      window-seconds: 60                          # sliding-window length
+    cooldown-seconds: 300                         # suppress repeat alerts for the same key
+    classes: []                                   # whitelist prefix list; empty = alert on every class
 ```
+
+### What's new
+
+Highlights from the rounds that landed on `dev` between the last doc sync and now (47 commits, see `TEST_REPORT.md` §8):
+
+- **CORS** (`ba3af83`) — `security.cors.allowed-origins` enables a `CorsFilter` registered against `/methodTraceLog/*`. Empty list = filter not registered (no behavior change).
+- **Exception alerting** (`77da2f8`, `9ab2347`, `ee5adfa`, `a427fa5`, `8999261`) — `AlertingService` is a 4th built-in `ICallService`. Sliding-window threshold + cooldown, async webhook (3s timeout, daemon pool), `ring buffer` of recent events exposed at `/view/alerts` and via MCP `getAlerts`.
+- **Slow methods** (`ee5adfa`, `a427fa5`) — `SlowMethodAnalyzer` reads the Micrometer histogram and returns top-N at `/view/slowMethods` and via MCP `getSlowMethods`.
+- **Log file size cap** (`4de58d3`, `faaa4a4`) — `file.max-file-size=100MB` + `file.total-size-cap=10GB` defaults; logback rolls with `SizeAndTimeBasedRollingPolicy` to honour them.
+- **Robust sampler** (`d688441`) — `sample-rate` is clamped to `[0.0, 1.0]` on startup; bad config no longer crashes the context.
+- **Method-name blacklist** — `log.exclude-patterns` (e.g. `[equals, hashCode, toString, canEqual]`) short-circuits matched methods at the very top of the `LogAspect` advice — no `traceid` / `spanid` is allocated, no event is emitted. Wired in `LogConfig.logAspect()` (`methodTraceLog/src/main/java/cn/wubo/method/trace/log/LogAspect.java:91-95`, `:142-150`); default empty.
+- **Trace store enforces cap** (`24808e2`, `14a19d8`) — `maxTraces` is now actually enforced for in-memory & file stores; `rebuildIndex` populates the recent list (not just the index map).
+- **Decompile: 404 when method is not in class** (`daaf99f`) — previously fell back to returning the whole class.
+- **Multi-file log monitor** (`45411a3`) — `LogFileRealTimeService` now monitors N files concurrently; `/logFile/monitor/status` returns `monitoredFiles: Set<String>` + `monitoredFilesCount` (the old `currentFile` field is gone — clean break).
+- **Shutdown cleanup** (`810f45f`) — `@PreDestroy` on `LogFileRealTimeService.close()` plus an explicit JVM shutdown hook; `ClosedWatchServiceException` is handled cleanly.
+- **ResponseStatusException body** (`7b77278`) — `server.error.include-message=always` is set as a starter default; 4xx responses now include the actual `message` field.
+- **MCP logback → stderr** (`cc5dc2a`) — `logback-spring.xml` in the MCP module routes the only `ConsoleAppender` to `System.err` so stdio stays clean for JSON-RPC.
+- **ApiKeyFilter direct tests** (`3871013`) — 8 unit tests cover X-Api-Key / cookie / whitelisted panel / OPTIONS / no-op paths.
+
+Still on the roadmap (not yet committed):
+- OTel tree topology via `ExtendedSpanBuilder.setSpanId(String)` — needs `opentelemetry-api-incubator` added as an optional compile dep; currently `SpanBuilder.setSpanId(byte[])` is not available in the resolved OTel 1.49.0.
+
 
 ---
 

@@ -263,3 +263,92 @@
   ```
 - **traceid 格式差异**：本进程内 AOP 创建的 traceid 形如 `d7392869-e1fb-4d29-8786-ece3a7ee557e`（UUID + 短横线）；从 HTTP 头 `traceparent` 解析出的 traceid 是 W3C `d7392869e1fb4d298786ece3a7ee557e`（32 hex 字符无短横线）。两侧值在去短横线后完全一致，是 W3C Trace Context 标准的正常行为。
 - **双实例共享 logback 文件**：8085 与 8086 同时写 `./logs/myApp.log`。本轮验证 8086 启动后两个实例都能正常 append，未触发 Windows 文件锁冲突。如未来出现 logback `FileAppender` 报错，再切到各自 `${LOG_DIR}/${APP_NAME}-${server.port}.log`。
+
+---
+
+## 8. Round 4–6 测试与修复总结（2026-08-28）
+
+`dev` 分支累计新增 **47 个 commit**（自上次同步起）。本节汇总 Round 4–6 的 bug、修复、验证覆盖与仍未关闭的事项。Round 1–3 修复见 §6 / §7。
+
+### 8.1 新发现的 bug（按优先级）
+
+| ID | 优先级 | 标题 | 现象 |
+|---|---|---|---|
+| G1 | 🔴 P0 | 坏 `sample-rate` 导致 context 启动失败 | `HeadBasedSampler(double)` 对 `<0` 或 `>1` 的值抛 `IllegalArgumentException`，Spring 启动直接挂掉 |
+| G2 | 🟠 P1 | `InMemoryTraceStore.maxTraces` 静默忽略 | 配置里改了不生效，OOM 才能复现 |
+| G3 | 🟠 P1 | `FileTraceStore.rebuildIndex` 只填索引不填 recent | 启动后 `getRecent()` 是空的，trace 看起来全丢 |
+| M3 | 🟡 P2 | `ValidationUtils` 缺少 class-level Javadoc | 调用方不清楚它是配合 RouterFunction catch 块使用的 |
+| M1 | 🟡 P2 | 文档过时（MCP 13→15 工具 + 新端点） | `/view/alerts`、`/view/slowMethods`、MCP `getAlerts` / `getSlowMethods` 未文档化 |
+| Round-5 Fix 1 | 🟠 P1 | MCP stdout 被 logback 污染 | JSON-RPC 解析失败，AI 客户端拿不到响应 |
+| Round-5 Fix 2 | 🟡 P2 | `ResponseStatusException` 不带 message | 4xx 响应体里只有 `status/error/path`，没有 `message` |
+| Round-5 Fix 3 | 🔴 P0 (BLOCKED) | OTel tree 父子关系断 | OTel 1.49.0 没有 `SpanBuilder.setSpanId(byte[])` |
+| Round-6 Fix 1 | 🟡 P2 | `ApiKeyFilter` 无直接单测 | 仅靠集成验证，回归风险大 |
+| Round-6 Fix 2 | 🟡 P2 | Windows 上 `LogFileRealTimeService` 关闭泄漏 | `WatchService` + executor 在 Ctrl+C / 容器重启时未释放 |
+| Round-6 Fix 3 | 🟡 P2 | 单文件监控模型不实用 | 同时盯 N 个文件无法表达；`stop` 一个会清掉全部状态 |
+
+### 8.2 已修复（带 commit hash）
+
+| Task | Commit | 说明 |
+|---|---|---|
+| **G1** | `d688441` | `LogConfig.mtlSampler()`：对 `sample-rate` 做 `Math.max(0.0, Math.min(1.0, rate))` clamp |
+| **G2** | `24808e2` | `InMemoryTraceStore`：构造器加 `maxTraces` 入参；`save()` 调 `evictIfNeeded()`；新增 5 个单测 |
+| **G3** | `14a19d8` | `FileTraceStore.rebuildIndex`：用 `Files.getLastModifiedTime` 作时间戳回填 recent；`evictIfNeeded()` 兜底；2 个新单测 |
+| **M1a** | `ab45a1d` | 文档：README 双语 MCP 工具数 13→15，工具列表加 `getAlerts`/`getSlowMethods` |
+| **M1b** | `73212c7` | 文档：HTTP surface 加 `/view/alerts`、`/view/slowMethods`；CLAUDE.md 同步 |
+| **M3** | `c379c5a` | `ValidationUtils` 加 class-level Javadoc |
+| **Round-5 Fix 1** | `cc5dc2a` | `methodTraceLog-mcp` 新增 `logback-spring.xml`：仅 `ConsoleAppender` → `System.err`，静音 Spring/OTel/reactor |
+| **Round-5 Fix 2** | `7b77278` | 新增 `ErrorMessagePropertiesPostProcessor`：默认 `server.error.include-message=always`、`include-stacktrace=never`；2 个单测 |
+| **Round-5 Fix 3** | — | **BLOCKED**（见 §8.4） |
+| **Round-6 Fix 1** | `3871013` | `ApiKeyFilterTest`：8 个直接单测（X-Api-Key / cookie / 白名单 / OPTIONS / 关闭路径） |
+| **Round-6 Fix 2** | `810f45f` | `LogFileRealTimeService.close()` 改为 `public` + `@PreDestroy`；`LogConfig` 注册 `MtlShutdownHook`（JVM shutdown 时显式 `ctx.close()`）；`ClosedWatchServiceException` 优雅退出 |
+| **Round-6 Fix 3** | `45411a3` | `LogFileRealTimeService` 用 `Map<String, MonitoredFile>` 支持多文件并发监控；`stopMonitoring(name)` 只摘掉一个；`getMonitorStatus()` 改返回 `{monitoring, monitoredFiles:Set<String>, monitoredFilesCount}`；5 个新单测 + 旧单测更新 |
+
+### 8.3 验证覆盖
+
+| 范围 | 命令 / 手段 | 结果 |
+|---|---|---|
+| 完整构建 | `mvn install -DskipTests -Dgpg.skip=true` | **BUILD SUCCESS**（6 个模块） |
+| Round-4 单测 | `mvn -pl methodTraceLog-test test -Dtest='InMemoryTraceStoreMaxTracesTest,InMemoryTraceStoreTest,InMemoryTraceStoreConcurrencyTest,FileTraceStoreTest'` | **25/25 pass** |
+| Round-5 Fix 2 单测 | `mvn -pl methodTraceLog-test test -Dtest=ErrorMessagePropertiesPostProcessorTest` | **2/2 pass** |
+| Round-5 Fix 2 live | `GET /methodTraceLog/view/traceid?id=DOESNOTEXIST` | **404 + `"message":"trace not found: DOESNOTEXIST"`** ✓ |
+| Round-5 Fix 2 live | `GET /methodTraceLog/decompile?className=...&methodName=nonExistent` | **404 + `"message":"Method not found: ..."`** ✓ |
+| Round-6 单测 | `mvn -pl methodTraceLog-test test -Dtest='ApiKeyFilterTest,LogFileRealTimeServiceMultiFileTest,LogFileRealTimeServiceTest'` | **15/15 pass** |
+| 全量单测 | `mvn -pl methodTraceLog-test test` | **148/148 pass, 0 failures, 0 errors** |
+| MCP stdio 隔离 | MCP fat-jar (28,176,485 bytes) 启动后 stdout 干净 | 验证 logback 仅走 stderr ✓ |
+| 旧测试 app PID | 57820 (Round-5 Fix 2 验证后清理)；后续 Round-6 测试不依赖 live 验证 |  |
+
+### 8.4 仍开放（按 jar 模型分类）
+
+#### core (`methodTraceLog`)
+
+- **`extractMethod` 在 text block 场景未覆盖** — T5-M4 残留。CFR 不会发 text block，所以不影响实际使用，但理论上 `"""..."""` 内的 `{` / `}` 会破坏 brace counter。
+- **`SimpleMonitorServiceImpl.methodTraceInfos` 高并发下仍理论风险** — Round-1 已切 `ConcurrentLinkedDeque`，但 `evictIfNeeded` 不是原子的，长时间跑仍有微小窗口。Round-4 仅修了 in-memory store 的对应实现，未合并 monitor 端。
+
+#### autoconfigure (`methodTraceLog-spring-boot-autoconfigure`)
+
+- **OTel tree 父子关系**（Round-5 Fix 3，**BLOCKED**）— `SpanBuilder.setSpanId(byte[])` 在 OTel 1.49.0 不存在；真正的 API 是 incubator 的 `ExtendedSpanBuilder.setSpanId(String)`。需要把 `opentelemetry-api-incubator` 加为 optional compile 依赖。
+- **`MtlShutdownHook` 仅在 `LogConfig` 注册** — 用户若 `log.enable=false, file.enable=true`，hook 不会注册，但 `@PreDestroy` 仍会跑（`LogFileRealTimeService.close()`）。可接受。
+- **`CorsFilter` 仅在 `allowed-origins` 非空时注册**（设计如此）— dev 默认不开；生产需显式配置。
+
+#### starter (`methodTraceLog-spring-boot-starter`)
+
+- 空 wrapper，无变化。
+
+#### mcp (`methodTraceLog-mcp`)
+
+- **`logback-spring.xml` 不带 `application-name` 占位符** — 多实例 MCP 同时跑会共用 stderr。生产多副本场景需各自打不同 jar 或追加 `<appender class="…"/>` 路由到文件。
+- **`RestClient` 无超时配置** — 转发 host 慢/挂起时 MCP 会等默认 JDK HttpClient 超时。当前依赖 host 端超时；MCP 侧可加全局 5s timeout。
+- **stdio 模式无法跨进程复用** — 每次 AI 客户端启动都要 new 一个 JVM。设计上如此，记一笔。
+
+#### test (`methodTraceLog-test`)
+
+- **`LogAspectExclusionTest` 有 2 个**预存在**测试失败**（`empty_patterns_no_exclusion`、`null_patterns_no_exclusion`）— `ExcludeTarget` 没有 override `equals`，所以 `proxy.equals(...)` 不走代理；测试断言与 `LogAspect` 实际行为不符。本次仅做文档同步，未触及代码。Round 后续修复需调整测试目标（如改用 `hashCode` / `toString`）或让 `ExcludeTarget` 显式 override `equals`。
+- **test app 未启动 `spring-boot-maven-plugin`** — Round-1 时已修，但 README / CLAUDE.md 中 `mvn -pl methodTraceLog-test spring-boot:run` 这条命令实际仍会失败。需要手动 `java -cp ...` 或加 plugin。
+- **8085/8086 双实例共享 logback 文件** — 当前可工作，但 Windows 文件锁理论上有冲突；生产建议切 `${APP_NAME}-${server.port}.log`。
+- **CORS 在 test app 未生效** — `allowed-origins` 默认空。`CorsFilterConfigTest` 已覆盖 3 个分支，live 不演示是因为设计 opt-in。
+
+#### docs
+
+- **CHANGELOG.md 不存在** — 本次同步仍未创建；后续如需 release-notes 流程可新建。
+- **`exclude-patterns` 与 OTel incubator 升级两条路线**在 §8.4 与 README 「路线图」中记录，但未给出 ETA。
+

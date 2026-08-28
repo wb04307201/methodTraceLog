@@ -75,9 +75,10 @@ management:
 method-trace-log:
   log:
     enable: true                                  # AOP 总开关
-    sample-rate: 1.0                              # 0.0 ~ 1.0；子调用继承父决定
+    sample-rate: 1.0                              # 0.0 ~ 1.0；子调用继承父决定（启动时会自动 clamp）
+    exclude-patterns: []                          # 方法名黑名单（大小写不敏感精确匹配）；命中后直接 proceed()，不发任何事件。例如 [equals, hashCode, toString, canEqual]
     service-calls:                                # 启动时各服务开关
-      - { name: CustomLog,         enable: false }   # 内置 3 个: SimpleLogService / SimpleMonitorService / CustomLog
+      - { name: CustomLog,         enable: false }   # 内置: SimpleLogService / SimpleMonitorService / AlertingService / CustomLog
     trace-store:                                  # 内存 trace 树持久化
       type: in-memory                             # in-memory | file | none
       path: ./trace-store                         # 仅 type=file 时生效（自动按 yyyy-MM-dd 建子目录）
@@ -89,11 +90,19 @@ method-trace-log:
     path: ./logs
     allowed-extensions: [.log, .txt, .out]
     scan-lines: 10000                             # 流式扫描行数上限；Files.lines() + limit() 是懒加载，文件本身多大都无所谓，没有 size check
+    max-file-size: 100MB                          # 单文件大小上限（默认；0/null = 不限制）
+    total-size-cap: 10GB                          # 目录下所有滚动文件总大小上限
     # log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
   security:
     api-key: change-me-in-production              # 留空 = 关闭鉴权
     session:
       ttl-millis: 28800000                        # 浏览器 cookie 会话 8h 滑动过期
+    cors:                                         # 跨域配置（面板部署在不同 origin 时使用；opt-in：空列表 = 不注册）
+      allowed-origins: []                         # ["https://your-panel.example.com"]；["*"] = 全部（与 credentials 互斥）
+      allowed-methods: [GET, POST, OPTIONS, DELETE, PUT]
+      allowed-headers: [Content-Type, X-Api-Key, Authorization]
+      allow-credentials: false                    # true 时 allowed-origins 不能是 "*"
+      max-age: 0                                  # preflight 缓存秒数（0 = 每次重新校验）
   decompile:
     timeout-seconds: 10                           # CFR daemon 线程超时
   otel:                                           # 需要 classpath 上有 opentelemetry-sdk
@@ -109,7 +118,38 @@ method-trace-log:
     http-inbound: true                            # TraceContextFilter 读 traceparent
     rest-client-outbound: true                    # RestClient.Builder 拦截器
     rest-template-interceptor: true               # 暴露 RestTemplate 拦截器 Bean
+  alerting:                                       # 异常告警（opt-in，默认关闭）
+    enable: false                                 # true 时注册 AlertingService 作为 ICallService
+    webhook-url: ""                               # 空 = 只本地记录；非空则异步 POST 事件（best-effort）
+    threshold:
+      error-count: 10                             # 同一 class#method 在窗口内错误数达到该值触发
+      window-seconds: 60                          # 滑动窗口长度
+    cooldown-seconds: 300                         # 同一 key 在冷却期内不再重复告警
+    classes: []                                   # 白名单（前缀匹配）；空 = 全部类都告警
 ```
+
+### 更新日志
+
+上一次同步文档之后 `dev` 分支新增 47 个 commit 的关键改动（详见 `TEST_REPORT.md` §8）：
+
+- **CORS**（`ba3af83`）— `security.cors.allowed-origins` 启用后注册 `CorsFilter` 到 `/methodTraceLog/*`；空列表 = 不过滤（行为不变）。
+- **异常告警**（`77da2f8`、`9ab2347`、`ee5adfa`、`a427fa5`、`8999261`）— `AlertingService` 作为第 4 个内置 `ICallService`；滑动窗口阈值 + 冷却期，异步 webhook（3s 超时，daemon 线程池），最近事件 ring buffer 通过 `/view/alerts` 与 MCP `getAlerts` 暴露。
+- **慢方法 Top-N**（`ee5adfa`、`a427fa5`）— `SlowMethodAnalyzer` 从 Micrometer histogram 出 Top-N，通过 `/view/slowMethods` 与 MCP `getSlowMethods` 暴露。
+- **日志文件大小上限**（`4de58d3`、`faaa4a4`）— 默认 `file.max-file-size=100MB` + `file.total-size-cap=10GB`；logback 用 `SizeAndTimeBasedRollingPolicy` 落实。
+- **采样健壮性**（`d688441`）— `sample-rate` 启动时 clamp 到 `[0.0, 1.0]`，错误配置不再导致 context 启动失败。
+- **方法名黑名单** — `log.exclude-patterns`（如 `[equals, hashCode, toString, canEqual]`）在 `LogAspect` 通知最顶端短路——命中方法不分配 `traceid` / `spanid`，也不发出任何事件；`LogConfig.logAspect()` 注入（`methodTraceLog/src/main/java/cn/wubo/method/trace/log/LogAspect.java:91-95` 与 `:142-150`）；默认空。
+- **trace 存储容量生效**（`24808e2`、`14a19d8`）— `maxTraces` 真正生效；`rebuildIndex` 也会回填 recent list。
+- **反编译：找不到方法返回 404**（`daaf99f`）— 之前是 fallback 到整个类。
+- **日志监控支持多文件**（`45411a3`）— `LogFileRealTimeService` 可同时监控 N 个文件；`/logFile/monitor/status` 返回 `monitoredFiles: Set<String>` + `monitoredFilesCount`（旧的 `currentFile` 字段移除）。
+- **关闭清理**（`810f45f`）— `LogFileRealTimeService.close()` 加 `@PreDestroy` + 显式 JVM shutdown hook；`ClosedWatchServiceException` 优雅处理。
+- **4xx 响应体携带 message**（`7b77278`）— `server.error.include-message=always` 由 starter 默认设置；4xx 响应体带 `message` 字段。
+- **MCP logback → stderr**（`cc5dc2a`）— `methodTraceLog-mcp` 自带 `logback-spring.xml`，仅 `ConsoleAppender` 走 stderr，stdio 留给 JSON-RPC。
+- **ApiKeyFilter 直接单测**（`3871013`）— 8 个单元测试覆盖 X-Api-Key / cookie / 白名单 / OPTIONS / 关闭路径。
+
+路线图（尚未提交）：
+
+- OTel tree 拓扑通过 `ExtendedSpanBuilder.setSpanId(String)` — 需要把 `opentelemetry-api-incubator` 升级为 optional compile 依赖；当前 OTel 1.49.0 的 `SpanBuilder` 没有 `setSpanId(byte[])`。
+
 
 ---
 

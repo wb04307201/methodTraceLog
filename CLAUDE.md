@@ -137,7 +137,47 @@ All tool parameters are declared with `@ToolParam(description = ...)` and the pa
 - `LogAspect` explicitly excludes the framework's own types via `!within(...)`. Adding new internal classes that should also be invisible to the aspect requires extending the pointcut expression in `LogAspect.java`.
 - `SimpleMonitorServiceImpl.methodTraceInfos` is an in-memory list pruned on a best-effort basis during new root-call processing. Long-lived processes with low traffic can keep stale entries up to 8h; high traffic causes the prune to fire on every root call.
 - The default `logPattern` only matches the standard logback pattern. If `logback.xml` is changed, the regex in `application.yml` must be updated or `LogLineInfo.parse` will return unparsed lines and keyword/level/time filters will not work.
-- The `LogAspect` uses `MDC` keys `traceid` / `spanid` / `pspanid`. Custom logback patterns can include `%X{traceid}` etc. to correlate logs across services.
+- The `LogAspect` uses `MDC` keys `traceid` / `spanid` / `pspanid` / `mtlSampled`. Custom logback patterns can include `%X{traceid}` etc. to correlate logs across services.
 - The CFR decompiler reads class bytes through the classloader's `getResourceAsStream`. This works uniformly for file paths, thin jars, and Spring Boot fat-jar nested jars — do **not** try to parse the `URL.getPath()` string of the resource.
 - The CFR decompiler is invoked on a daemon thread with a future timeout. CFR running on a pathologic input will be cancelled cleanly, but the temp file is always cleaned up in `finally`.
 - This is a Windows / IntelliJ project (`.idea/` is present and `.gitignore` ignores `.idea`, `*.iws`, `*.iml`); use the Windows shell syntax hints already in this environment when running shell tools.
+
+## Phase 6+ testing & fixes (since this doc was last synced)
+
+47 commits on `dev` between the last CLAUDE.md refresh and now. The full report is in `TEST_REPORT.md` §8; the highlights for future-Claude context:
+
+- **New config groups** (see `MethodTraceLogProperties`):
+  - `method-trace-log.alerting.{enable, webhook-url, threshold.{error-count, window-seconds}, cooldown-seconds, classes[]}` — opt-in `AlertingService` ICallService. `AlertingProperties` is instantiated but `enable=false` by default; the bean is only registered when `enable=true`.
+  - `method-trace-log.security.cors.{allowed-origins[], allowed-methods[], allowed-headers[], allow-credentials, max-age}` — opt-in `CorsFilter` against `/methodTraceLog/*`. Empty `allowed-origins` = filter not registered.
+  - `method-trace-log.file.{max-file-size, total-size-cap}` — defaults `100MB` / `10GB`; honoured by the test module's `SizeAndTimeBasedRollingPolicy`.
+  - `method-trace-log.log.{sample-rate, exclude-patterns[], trace-store.{type,path,max-traces,ttl-millis,rebuild-index-on-start}}` — `sample-rate` is clamped to `[0.0, 1.0]` on startup; `exclude-patterns` is a method-name blacklist (case-insensitive `equals` match) that short-circuits matched methods at the top of `LogAspect.around` — no `traceid` / `spanid` allocated, no `BEFORE` / `AFTER_*` events emitted (wired in `LogConfig.logAspect()` via the 3-arg `LogAspect` constructor at `LogAspect.java:91`); `trace-store` picks `in-memory` (default) / `file` / `none` via `mtlTraceStore` bean.
+
+- **New HTTP routes** (all under `/methodTraceLog`, gated by `ApiKeyFilter` when `security.api-key` is set):
+  - `GET /view/alerts?limit=` — recent `AlertEvent` list (default limit 50; returns `[]` when alerting disabled rather than 404).
+  - `GET /view/slowMethods?windowMinutes=&topN=` — top-N by p50/p95/p99/max from the Micrometer `method.execution.time` histogram (defaults 5min / 10).
+  - `POST /login` (body `{"apiKey":"..."}`), `POST /logout`, `GET /session/status` — cookie-based browser auth (sliding 8h TTL); 401 when key invalid, banner re-mounts on logout.
+  - `GET /logFile/monitor/status` — response shape changed in round 6: now returns `{monitoring, monitoredFiles:Set<String>, monitoredFilesCount}`; the old `currentFile` field is gone (clean break, JS panel unaffected).
+
+- **New MCP tools** (`MethodTraceLogMcpService`): `getAlerts(host, limit?)` and `getSlowMethods(host, windowMinutes?, topN?)`. Tool count is **15** now (was 13).
+
+- **New beans / lifecycle**:
+  - `AlertingService` — registered only when `alerting.enable=true`. Webhook delivery runs on a dedicated daemon `cached` pool with 3s per-call timeout; never blocks Tomcat threads (the original sync-delivery bug would self-deadlock when the webhook URL pointed at the host itself).
+  - `SlowMethodAnalyzer` — unconditional; pure read of the Micrometer registry.
+  - `MtlShutdownHook` (nested in `LogConfig`) — registers a JVM shutdown hook that calls `ConfigurableApplicationContext.close()`. Belt-and-braces for Windows where `Ctrl+C` does not always reach the JVM.
+  - `LogFileRealTimeService.close()` is `public` and annotated `@PreDestroy` so the `WatchService` + `ScheduledExecutorService` are released on every Spring teardown path.
+  - `CorsFilterConfig` — registers a `FilterRegistrationBean<CorsFilter>` only when `cors.allowed-origins` is non-empty.
+  - `ErrorMessagePropertiesPostProcessor` — `EnvironmentPostProcessor` that sets `server.error.include-message=always` and `include-stacktrace=never` as defaults (respects explicit user values).
+
+- **New tests** (under `methodTraceLog-test/src/test/...`):
+  - `ApiKeyFilterTest` — 8 direct unit tests (X-Api-Key, cookie, panel whitelist, OPTIONS, no-op).
+  - `InMemoryTraceStoreMaxTracesTest` — 5 eviction cases.
+  - `FileTraceStoreTest.rebuildIndex_*` — 2 cases for index+recent population.
+  - `LogFileRealTimeServiceMultiFileTest` — 5 cases for concurrent multi-file monitoring.
+  - `ErrorMessagePropertiesPostProcessorTest` — 2 cases (defaults added when unset, user values preserved).
+  - `MethodTraceLogMcpServiceTest` — 13 unit tests for URL assembly, clamping, host lookup, `X-Api-Key` forwarding.
+
+- **Open / blocked items** (still on the roadmap):
+  - OTel tree topology via `ExtendedSpanBuilder.setSpanId(String)` — needs `opentelemetry-api-incubator` added as an optional compile dep; the brief's `SpanBuilder.setSpanId(byte[])` claim is false for OTel 1.49.0 (see round-5 report, `BLOCKED`). The actual public API is `io.opentelemetry.api.incubator.trace.ExtendedSpanBuilder.setSpanId(String)` in a separate JAR.
+  - Windows `taskkill` without `/F` still skips JVM shutdown hooks (`CTRL_CLOSE_EVENT` not mapped). The `@PreDestroy` + JVM shutdown-hook combination is the most portable fix without dropping into `sun.misc.Signal`.
+  - `LogAspectExclusionTest` (`methodTraceLog-test/.../LogAspectExclusionTest.java`) has 2 pre-existing failures (`empty_patterns_no_exclusion`, `null_patterns_no_exclusion`) that pre-date this doc sync — the test asserts `Object.equals()` on a target that doesn't override `equals` flows through the proxy, which it does not. Out of scope for docs-only changes; track as a separate fix.
+
