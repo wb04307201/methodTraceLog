@@ -20,6 +20,11 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- MtlE2eHarness (src/main/.../e2e) needs TestRestTemplate / RestTemplateBuilder at compile scope -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test</artifactId>
+        </dependency>
         <!-- OTel 集成：compile 范围，用户按 README 启用 OTel 时方可启动 sample app（mvn spring-boot:run / java -jar） -->
         <dependency>
             <groupId>io.opentelemetry</groupId>
