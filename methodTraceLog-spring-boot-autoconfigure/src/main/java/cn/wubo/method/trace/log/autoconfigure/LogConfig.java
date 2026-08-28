@@ -64,6 +64,9 @@ public class LogConfig {
         double rate = properties.getLog() == null || properties.getLog().getSampleRate() == null
                 ? 1.0
                 : properties.getLog().getSampleRate();
+        // clamp 到 [0.0, 1.0]：HeadBasedSampler 构造器对越界值会抛 IllegalArgumentException，
+        // 导致整个 Spring 上下文启动失败。把超界值夹到合法区间即可保持应用可用。
+        rate = Math.max(0.0, Math.min(1.0, rate));
         return new HeadBasedSampler(rate);
     }
 
