@@ -147,6 +147,7 @@ public class LogAspect {
             if (sampled) {
                 // 设置异常信息并执行后置异常处理逻辑
                 after.setContext(AbstractCallService.transContext(e));
+                after.setRawException(e);  // 保留原始异常对象，供 OTel 等需要 Throwable 的下游使用
                 after.setLogActionEnum(LogActionEnum.AFTER_THROW);
                 after.setTimeMillis(System.currentTimeMillis());
                 callServiceStrategy.consumer(after);

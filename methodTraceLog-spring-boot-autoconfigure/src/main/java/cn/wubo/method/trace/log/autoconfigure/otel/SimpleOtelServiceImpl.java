@@ -105,8 +105,11 @@ public class SimpleOtelServiceImpl extends AbstractCallService {
         try (Scope ignored = span.makeCurrent()) {
             if (info.getLogActionEnum() == LogActionEnum.AFTER_THROW) {
                 span.setStatus(StatusCode.ERROR, "exception");
-                if (info.getContext() instanceof Throwable t) {
-                    span.recordException(t);
+                // 优先走 rawException 旁路：LogAspect 在写 context 之前调过 transContext(e)
+                // 把异常 stringify 了，info.getContext() 不再是 Throwable。
+                Throwable raw = info.getRawException();
+                if (raw != null) {
+                    span.recordException(raw);
                 } else if (info.getContext() != null) {
                     span.setAttribute("error.message", String.valueOf(info.getContext()));
                 }
