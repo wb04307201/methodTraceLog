@@ -25,6 +25,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.core.Ordered;
@@ -200,6 +201,45 @@ public class LogConfig {
     @Bean
     public SlowMethodAnalyzer slowMethodAnalyzer(MeterRegistry meterRegistry) {
         return new SlowMethodAnalyzer(meterRegistry);
+    }
+
+    /**
+     * 注册 JVM shutdown hook：保证在收到关闭信号（Ctrl+C / System.exit / Spring
+     * 自身调用）时显式 {@link ConfigurableApplicationContext#close()}，从而
+     * 触发 {@code @PreDestroy} 与 {@code DisposableBean.destroy()} 链路，确保
+     * {@code LogFileRealTimeService} 的 WatchService / executor 被及时释放。
+     * <p>
+     * 这是对 Spring Boot 自身注册的那个 hook 的冗余加固——后者在 Windows 上
+     * 同样依赖 JVM 关闭信号；本 hook 仅多打一行日志，并幂等地再次调用 close，
+     * 不会引发问题。
+     */
+    @Bean
+    public MtlShutdownHook mtlShutdownHook(ConfigurableApplicationContext ctx) {
+        return new MtlShutdownHook(ctx);
+    }
+
+    /**
+     * 进程关闭钩子：日志记录 + 兜底调用 context.close()。通过把代码塞进
+     * 一个独立类，避免 LogConfig 的 import 体出现 sun.misc 等平台相关 API。
+     */
+    static final class MtlShutdownHook {
+        private final ConfigurableApplicationContext ctx;
+
+        MtlShutdownHook(ConfigurableApplicationContext ctx) {
+            this.ctx = ctx;
+            Runtime.getRuntime().addShutdownHook(new Thread(this::onShutdown, "mtl-shutdown-hook"));
+        }
+
+        private void onShutdown() {
+            try {
+                log.info("mtl: shutdown hook triggered");
+                if (ctx != null && ctx.isActive()) {
+                    ctx.close();
+                }
+            } catch (Exception e) {
+                log.warn("mtl: shutdown hook failed: {}", e.getMessage());
+            }
+        }
     }
 
     @Bean("wb04307201MethodTraceLogRouter")

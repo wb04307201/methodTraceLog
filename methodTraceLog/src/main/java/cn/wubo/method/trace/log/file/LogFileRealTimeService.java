@@ -3,6 +3,7 @@ package cn.wubo.method.trace.log.file;
 import cn.wubo.method.trace.log.MethodTraceLogProperties;
 import cn.wubo.method.trace.log.file.dto.LogLineInfo;
 import cn.wubo.method.trace.log.utils.FileUtils;
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
@@ -325,8 +326,14 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
      * 该方法用于安全地关闭监听服务和执行服务资源，避免资源泄露。
      * 首先尝试关闭文件监听服务，如果关闭过程中出现异常会记录警告日志；
      * 然后关闭线程池执行服务，确保所有相关资源得到 proper cleanup。
+     * <p>
+     * 同时被 {@link PreDestroy}（Spring 上下文关闭时）与 {@link DisposableBean#destroy()}
+     * 双轨调用，最大限度保证 JVM 收到关闭信号时资源被释放（特别是 Windows 上
+     * {@code taskkill} 不带 {@code /F} 不触发 shutdown hook 的情况，靠 Spring 自身
+     * 的 context 关闭路径释放）。
      */
-    private void close() {
+    @PreDestroy
+    public void close() {
         // 关闭文件监听服务
         if (watchService != null) {
             try {
