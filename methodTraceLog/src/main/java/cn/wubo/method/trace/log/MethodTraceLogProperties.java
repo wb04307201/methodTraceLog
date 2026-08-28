@@ -56,7 +56,7 @@ public class MethodTraceLogProperties {
     private AlertingProperties alerting = new AlertingProperties();
 
     /**
-     * AOP 切面与 ICallService 启用配置：总开关、采样率、trace 持久化、初始服务列表。
+     * AOP 切面与 ICallService 启用配置：总开关、采样率、trace 持久化、初始服务列表、方法黑名单。
      */
     @Data
     public static class LogProperties {
@@ -74,6 +74,16 @@ public class MethodTraceLogProperties {
          * trace 持久化配置。
          */
         private TraceStoreProperties traceStore = new TraceStoreProperties();
+
+        /**
+         * 方法签名黑名单（精确匹配 simpleMethodName，不区分大小写）。
+         * 例如 {@code ["equals", "hashCode", "toString", "canEqual"]} 可排除 lombok / Data
+         * 生成的常见样板方法以及所有 DTO / Map 迭代时会大量触发的方法。
+         * 命中后 {@link cn.wubo.method.trace.log.LogAspect} 直接调用 proceed()，
+         * 不会发出任何 BEFORE / AFTER_RETURN / AFTER_THROW 事件。
+         * 默认空 = 不排除任何方法。
+         */
+        private List<String> excludePatterns = new ArrayList<>();
 
         /**
          * 单个 ICallService 的启动时 enable 配置。name 与 {@code ICallService.getCallServiceName()} 对齐。
