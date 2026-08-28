@@ -120,8 +120,11 @@ public class LogConfig {
     }
 
     @Bean
-    public LogAspect logAspect(CallServiceStrategy callServiceStrategy, Sampler sampler) {
-        return new LogAspect(callServiceStrategy, sampler);
+    public LogAspect logAspect(CallServiceStrategy callServiceStrategy, Sampler sampler, MethodTraceLogProperties properties) {
+        List<String> excludePatterns = properties.getLog() == null || properties.getLog().getExcludePatterns() == null
+                ? java.util.Collections.emptyList()
+                : properties.getLog().getExcludePatterns();
+        return new LogAspect(callServiceStrategy, sampler, excludePatterns);
     }
 
     /**
