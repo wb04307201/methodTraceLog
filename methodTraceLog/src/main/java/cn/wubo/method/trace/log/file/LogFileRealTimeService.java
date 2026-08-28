@@ -143,10 +143,11 @@ public class LogFileRealTimeService implements InitializingBean, DisposableBean 
                 // 恢复中断状态并退出循环
                 Thread.currentThread().interrupt();
                 break;
+            } catch (java.nio.file.ClosedWatchServiceException e) {
+                // destroy() 关闭 WatchService 后 take() 会抛此异常；正常退出，不打 ERROR
+                break;
             } catch (Exception e) {
-                // 记录异常日志并关闭监控服务
-                log.error(e.getMessage(), e);
-                this.close();
+                log.warn("mtl-logmonitor: watch error: {}", e.getMessage());
             }
         }
     }
