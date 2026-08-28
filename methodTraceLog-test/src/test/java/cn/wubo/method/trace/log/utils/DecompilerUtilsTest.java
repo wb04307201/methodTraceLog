@@ -169,4 +169,33 @@ class DecompilerUtilsTest {
         assertNull(DecompilerUtils.removeAnnotations(null));
         assertEquals("", DecompilerUtils.removeAnnotations(""));
     }
+
+    /**
+     * extractMethod 返回 empty 是 /decompile 路由返 404 的前置条件：
+     * 当 methodName 在反编译源码中找不到时，必须返回 Optional.empty()，
+     * 让 LogConfig.decompileRouter 抛 ResponseStatusException(NOT_FOUND)。
+     */
+    @Test
+    void extractMethod_nonexistentMethod_returnsEmpty() {
+        String src = """
+                public class Foo {
+                    public void existing() { x = 1; }
+                    public int existingInt(int a) { return a + 1; }
+                }
+                """;
+        assertTrue(DecompilerUtils.extractMethod(src, "doesNotExist").isEmpty(),
+                "non-existent method should yield empty Optional (drives 404 in decompileRouter)");
+    }
+
+    @Test
+    void extractMethod_existingMethod_returnsBody() {
+        String src = """
+                public class Foo {
+                    public void bar() { x = 1; }
+                }
+                """;
+        var body = DecompilerUtils.extractMethod(src, "bar");
+        assertTrue(body.isPresent());
+        assertTrue(body.get().contains("bar"), "extracted body should contain method name: " + body.get());
+    }
 }

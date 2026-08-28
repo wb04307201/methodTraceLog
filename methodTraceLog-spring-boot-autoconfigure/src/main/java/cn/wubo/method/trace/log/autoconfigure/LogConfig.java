@@ -467,8 +467,10 @@ public class LogConfig {
                     .orElse(defaultTimeout);
             String src = DecompilerUtils.decompile(className, methodName, timeout);
             String stripped = DecompilerUtils.removeAnnotations(src);
-            // 只回目标方法；切不到就 fallback 全量，保证行为不退化
-            String body = DecompilerUtils.extractMethod(stripped, methodName).orElse(stripped);
+            // 只回目标方法；切不到就 404（之前是 fallback 全量源码，导致 DOA 体验）
+            String body = DecompilerUtils.extractMethod(stripped, methodName)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                            "Method not found: " + className + "#" + methodName));
             return ServerResponse.ok().contentType(MediaType.TEXT_PLAIN).body(body);
         });
     }
