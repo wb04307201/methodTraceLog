@@ -80,8 +80,14 @@ public class SimpleOtelServiceImpl extends AbstractCallService {
     }
 
     private void startSpan(ServiceCallInfo info) {
-        SpanBuilderWrapper builder = newSpanBuilder(info);
-        Span span = builder.start();
+        Span span;
+        try {
+            SpanIdContext.set(toOtelSpanIdHex(info.getSpanid()));
+            SpanBuilderWrapper builder = newSpanBuilder(info);
+            span = builder.start();
+        } finally {
+            SpanIdContext.clear();
+        }
         try (Scope ignored = span.makeCurrent()) {
             // 设置属性
             span.setAttribute(AttributeKey.stringKey("code.namespace"), info.getClassName());

@@ -54,6 +54,7 @@ public class OtelAutoConfig {
 
         SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
                 .addSpanProcessor(bsp)
+                .setIdGenerator(MtlSpanIdGenerator.INSTANCE)
                 .setResource(resource)
                 .build();
 
