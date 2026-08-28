@@ -21,9 +21,11 @@ import cn.wubo.method.trace.log.utils.DecompilerUtils;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.Cookie;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -195,6 +197,36 @@ public class LogConfig {
             return null;
         }
         return new TraceContextRestTemplateInterceptor();
+    }
+
+    /**
+     * 把 {@link TraceContextRestTemplateInterceptor} 自动挂到 Spring Boot 自动配置的
+     * {@code RestTemplateBuilder} 上，使得 {@code restTemplateBuilder.build()} 得到的
+     * RestTemplate 天然带 traceparent 出站头，用户无需手工 setInterceptors。
+     * <p>
+     * 注意：Spring Boot 并没有 {@code RestTemplate.Builder} 这个类型；正确的扩展点是
+     * {@code RestTemplateCustomizer} —— {@code RestTemplateAutoConfiguration} 会把容器中
+     * 所有 RestTemplateCustomizer 应用到它暴露的 RestTemplateBuilder 上。因此这里注册
+     * customizer（而不是再定义一个 RestTemplateBuilder Bean 去覆盖 Boot 自己的那个）。
+     * <p>
+     * 直接用 RestTemplate 而非 builder 的用户仍可自行注入 interceptor Bean 手工设置。
+     */
+    @Bean
+    @ConditionalOnExpression("${method-trace-log.propagate.rest-template-interceptor:true}")
+    public RestTemplateCustomizer mtlTraceContextRestTemplateCustomizer(
+            ObjectProvider<TraceContextRestTemplateInterceptor> interceptorProvider) {
+        return restTemplate -> {
+            TraceContextRestTemplateInterceptor interceptor = interceptorProvider.getIfAvailable();
+            if (interceptor == null) {
+                return;
+            }
+            // 幂等：同一个 RestTemplate 被多次 customize 时不重复添加
+            boolean present = restTemplate.getInterceptors().stream()
+                    .anyMatch(TraceContextRestTemplateInterceptor.class::isInstance);
+            if (!present) {
+                restTemplate.getInterceptors().add(interceptor);
+            }
+        };
     }
 
     /**
