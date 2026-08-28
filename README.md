@@ -28,7 +28,7 @@
 | **OTel export** | Auto-bridges trace events to OpenTelemetry OTLP/HTTP when `opentelemetry-sdk` is on the classpath |
 | **W3C traceparent** | Auto-injects / extracts `traceparent` header for HTTP inbound and `RestClient` outbound |
 | **Cookie session** | Browser login via `POST /methodTraceLog/login`, HTTP `X-Api-Key` for CLI / MCP |
-| **MCP server** | Standalone stdio process; 13 tools, multi-host, forwards to your starter over HTTP |
+| **MCP server** | Standalone stdio process; 15 tools, multi-host, forwards to your starter over HTTP |
 
 ---
 
@@ -228,7 +228,7 @@ MCP server config (`mcpServers` JSON block) for AI clients like Claude Desktop, 
 }
 ```
 
-**13 tools exposed:** `getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`.
+**15 tools exposed:** `getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `getAlerts`, `getSlowMethods`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`.
 
 ---
 

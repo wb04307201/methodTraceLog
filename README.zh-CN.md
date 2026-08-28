@@ -28,7 +28,7 @@
 | **OTel 导出** | classpath 上有 `opentelemetry-sdk` 时自动桥接到 OTLP/HTTP |
 | **W3C traceparent** | HTTP 入站和 `RestClient` 出站自动注入/提取 |
 | **Cookie 会话** | 浏览器 `POST /methodTraceLog/login` 登录；CLI / MCP 继续用 `X-Api-Key` |
-| **MCP 服务** | 独立 stdio 进程；13 个工具，多主机，通过 HTTP 转发到目标应用 |
+| **MCP 服务** | 独立 stdio 进程；15 个工具，多主机，通过 HTTP 转发到目标应用 |
 
 ---
 
@@ -228,7 +228,7 @@ Claude Desktop / Cursor / Cline 等 AI 客户端的 MCP server 配置（`mcpServ
 }
 ```
 
-**13 个工具**：`getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`。
+**15 个工具**：`getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `getAlerts`, `getSlowMethods`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`。
 
 ---
 
