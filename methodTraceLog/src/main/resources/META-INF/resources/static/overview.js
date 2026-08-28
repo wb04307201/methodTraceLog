@@ -16,17 +16,17 @@
 
     function loadData() {
         mtlFetch('/methodTraceLog/view/callServices')
-            .then(r => r.json())
+            .then(r => { if (!r.ok) throw new Error('加载服务列表失败 HTTP ' + r.status); return r.json(); })
             .then(updateCallServices)
             .catch(e => MTL.toast(e.message));
 
         mtlFetch('/actuator/methodtrace')
-            .then(r => r.json())
+            .then(r => { if (!r.ok) throw new Error('加载方法统计失败 HTTP ' + r.status); return r.json(); })
             .then(data => { updateSummary(data); updateTable(data); })
             .catch(e => MTL.toast(e.message));
 
         mtlFetch('/methodTraceLog/view/list')
-            .then(r => r.json())
+            .then(r => { if (!r.ok) throw new Error('加载调用记录失败 HTTP ' + r.status); return r.json(); })
             .then(updateMethodTable)
             .catch(e => MTL.toast(e.message));
     }
@@ -147,7 +147,7 @@
     }
     function updateCallMethods(name, enable) {
         mtlFetch('/methodTraceLog/view/callService?name=' + name + '&enable=' + enable)
-            .then(r => r.json())
+            .then(r => { if (!r.ok) throw new Error('切换服务状态失败 HTTP ' + r.status); return r.json(); })
             .then(updateCallServices)
             .catch(e => MTL.toast(e.message));
     }
@@ -222,7 +222,7 @@
     }
     function openTraceModal(id) {
         mtlFetch(`/methodTraceLog/view/traceid?id=${id}`)
-            .then(r => r.json())
+            .then(r => { if (!r.ok) throw new Error('加载调用链失败 HTTP ' + r.status); return r.json(); })
             .then(data => {
                 const container = document.getElementById('trace-tree');
                 container.innerHTML = '';
