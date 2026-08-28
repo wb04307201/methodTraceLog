@@ -103,4 +103,35 @@ class FileTraceStoreTest {
         FileTraceStore reader = new FileTraceStore(dir.toString(), 60_000L, 100, true);
         assertNotNull(reader.getByTraceId("disk-1"));
     }
+
+    @Test
+    void rebuildIndex_populatesRecent(@TempDir Path dir) throws Exception {
+        // 写 5 个 trace（maxTraces=100, ttl=1h，不会被淘汰）
+        FileTraceStore writer = new FileTraceStore(dir.toString(), 3_600_000L, 100, false);
+        for (int i = 0; i < 5; i++) {
+            writer.save(MethodTraceInfo.create(newBefore("t-" + i)));
+        }
+        assertEquals(5, writer.getRecent(10).size());
+
+        // 重新打开 store，启用 rebuild 索引（模拟重启）
+        FileTraceStore reader = new FileTraceStore(dir.toString(), 3_600_000L, 100, true);
+        // getRecent 必须返回全部 5 条（验证 recent / recentTimestamps 被重建时填充）
+        List<MethodTraceInfo> recent = reader.getRecent(10);
+        assertEquals(5, recent.size());
+        // TTL 未过期，traceId 也都能查到
+        for (int i = 0; i < 5; i++) {
+            assertNotNull(reader.getByTraceId("t-" + i));
+        }
+    }
+
+    @Test
+    void rebuildIndex_evictsBeyondMaxTraces(@TempDir Path dir) throws Exception {
+        // 写 5 个 trace，重启时用 maxTraces=2 → 只保留最新的 2 个
+        FileTraceStore writer = new FileTraceStore(dir.toString(), 3_600_000L, 100, false);
+        for (int i = 0; i < 5; i++) {
+            writer.save(MethodTraceInfo.create(newBefore("t-" + i)));
+        }
+        FileTraceStore reader = new FileTraceStore(dir.toString(), 3_600_000L, 2, true);
+        assertEquals(2, reader.size());
+    }
 }

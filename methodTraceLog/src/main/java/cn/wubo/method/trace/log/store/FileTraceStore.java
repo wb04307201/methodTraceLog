@@ -191,12 +191,24 @@ public class FileTraceStore implements ITraceStore {
                     .toList();
             int added = 0;
             int skipped = 0;
+            long now = System.currentTimeMillis();
             for (Path f : files) {
                 try {
                     MethodTraceInfo info = mapper.readValue(f.toFile(), MethodTraceInfo.class);
                     if (info != null && info.getBefore() != null) {
-                        index.put(info.getBefore().getTraceid(), f);
-                        added++;
+                        String traceid = info.getBefore().getTraceid();
+                        index.put(traceid, f);
+                        // 同步填充 recent / recentTimestamps（用文件 mtime 近似"写入时间"），
+                        // 否则重启后 getRecent() 会返回空，与内存版语义不一致。
+                        // 同时跳过已经超过 ttlMillis 的过期文件，保持与 clean() 一致。
+                        long mtime = Files.getLastModifiedTime(f).toMillis();
+                        if (ttlMillis <= 0 || now - mtime <= ttlMillis) {
+                            recent.put(traceid, info);
+                            recentTimestamps.put(traceid, mtime);
+                            added++;
+                        } else {
+                            skipped++;
+                        }
                     } else {
                         skipped++;
                     }
@@ -205,6 +217,8 @@ public class FileTraceStore implements ITraceStore {
                     log.warn("FileTraceStore: skip malformed {}: {}", f, e.getMessage());
                 }
             }
+            // 重建后可能塞入超过 maxTraces 的条目，按写入时间淘汰最旧
+            evictIfNeeded();
             log.info("FileTraceStore: rebuilt index, scanned={} added={} skipped={}", files.size(), added, skipped);
         } catch (IOException e) {
             log.warn("FileTraceStore: rebuild index failed: {}", e.getMessage());
