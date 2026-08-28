@@ -125,6 +125,8 @@ All routes require `X-Api-Key` (or `MTRACE_SESSION` cookie) when `security.api-k
 | GET | `/methodTraceLog/view/list?className=&methodName=&onlyErrors=&limit=` | Recent root traces |
 | GET | `/methodTraceLog/view/traceid?id=` | Full call chain for a trace id |
 | GET | `/methodTraceLog/view/export?format=json\|csv&className=&methodName=&onlyErrors=&limit=` | Bulk export (default limit 1000) |
+| GET | `/methodTraceLog/view/alerts?limit=` | Recent alert events (default limit 50; empty list when alerting disabled) |
+| GET | `/methodTraceLog/view/slowMethods?windowMinutes=&topN=` | Slowest methods top-N from Micrometer histograms (default 5min / top 10) |
 | GET | `/methodTraceLog/decompile?className=&methodName=&timeoutSeconds=` | Text/plain source |
 | GET | `/methodTraceLog/logFile/files` | List log files in the configured dir |
 | POST | `/methodTraceLog/logFile/query` | Filter / paginate / time-range / level |

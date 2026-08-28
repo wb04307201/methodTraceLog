@@ -72,7 +72,7 @@ Trace path (one method invocation on a `@Component` / `@Service` / `@RestControl
 
 `ApiKeyFilter` (`OncePerRequestFilter`) is registered as a `FilterRegistrationBean` with URL pattern `/methodTraceLog/*` and `Ordered.HIGHEST_PRECEDENCE`. It skips the filter entirely for non-`/methodTraceLog/` paths and the `/methodTraceLog/panel` HTML page; for the rest, it requires `X-Api-Key` to equal `method-trace-log.security.api-key` (when configured). OPTIONS preflight is allowed unconditionally. 401 responses are returned as plain JSON.
 
-`methodTraceLog-mcp` (`MethodTraceLogMcpApplication`) is a standalone Spring Boot process with `web-application-type: none`. `MethodToolCallbackProvider.builder().toolObjects(service).build()` registers all 13 public `@Tool` methods on `MethodTraceLogMcpService` as MCP tools. The service itself just looks up the host by name in `MethodTraceLogMcpProperties.Hosts` and forwards the call via `RestClient`, adding `X-Api-Key` if the host has one configured. Transport is stdio (default for `spring-ai-starter-mcp-server`).
+`methodTraceLog-mcp` (`MethodTraceLogMcpApplication`) is a standalone Spring Boot process with `web-application-type: none`. `MethodToolCallbackProvider.builder().toolObjects(service).build()` registers all 15 public `@Tool` methods on `MethodTraceLogMcpService` as MCP tools. The service itself just looks up the host by name in `MethodTraceLogMcpProperties.Hosts` and forwards the call via `RestClient`, adding `X-Api-Key` if the host has one configured. Transport is stdio (default for `spring-ai-starter-mcp-server`).
 
 ## HTTP surface
 
@@ -84,6 +84,8 @@ All endpoints are registered as `RouterFunction<ServerResponse>` beans (`wb04307
 - `GET  /methodTraceLog/view/list?className=&methodName=&onlyErrors=&limit=` — root `MethodTraceInfo` nodes (newest calls).
 - `GET  /methodTraceLog/view/traceid?id=` — full tree for a trace.
 - `GET  /methodTraceLog/view/export?format=json|csv&className=&methodName=&onlyErrors=&limit=` — bulk export (default limit 1000).
+- `GET  /methodTraceLog/view/alerts?limit=` — recent alert events (default limit 50; returns empty list when alerting disabled rather than 404).
+- `GET  /methodTraceLog/view/slowMethods?windowMinutes=&topN=` — slowest methods top-N from Micrometer histograms (default 5min window / top 10).
 - `GET  /methodTraceLog/decompile?className=&methodName=&timeoutSeconds=` — text/plain CFR-decompiled source, annotations stripped.
 - `GET  /methodTraceLog/logFile/files` — list of readable log files.
 - `POST /methodTraceLog/logFile/query` body: `LogQueryRequest` — paginated, filtered lines.
@@ -115,6 +117,8 @@ Tab router is `window.MTL` (`registerTab`, `showTab`, `toast`, `openModal`, help
 | `setCallServiceEnable` | Enable/disable a log service on a host |
 | `getMethodTraceList` | Recent method-call trace records on a host |
 | `getMethodTraceByTraceId` | Full call chain for a trace id on a host |
+| `getAlerts` | Recent alert events on a host (returns empty when alerting disabled) |
+| `getSlowMethods` | Slowest methods top-N from Micrometer histograms on a host |
 | `decompileMethod` | Decompile a class+method on a host, returns source |
 | `getLogFiles` | List files in a host's log directory |
 | `queryLogContent` | Filter log lines by keyword / time / level on a host |

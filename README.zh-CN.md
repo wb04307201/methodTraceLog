@@ -125,6 +125,8 @@ method-trace-log:
 | GET | `/methodTraceLog/view/list?className=&methodName=&onlyErrors=&limit=` | 最近根 trace |
 | GET | `/methodTraceLog/view/traceid?id=` | 单个 trace 完整调用链 |
 | GET | `/methodTraceLog/view/export?format=json\|csv&className=&methodName=&onlyErrors=&limit=` | 批量导出（默认 limit 1000） |
+| GET | `/methodTraceLog/view/alerts?limit=` | 最近告警事件（默认 limit 50；告警未启用时返回空 list） |
+| GET | `/methodTraceLog/view/slowMethods?windowMinutes=&topN=` | Micrometer histogram 出来的最慢方法 top-N（默认 5min / top 10） |
 | GET | `/methodTraceLog/decompile?className=&methodName=&timeoutSeconds=` | text/plain 源码 |
 | GET | `/methodTraceLog/logFile/files` | 日志目录文件列表 |
 | POST | `/methodTraceLog/logFile/query` | 关键字 / 时间 / 级别过滤分页 |
