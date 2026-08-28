@@ -121,17 +121,19 @@ class LogFileRealTimeServiceTest {
 
     @Test
     void stopMonitoring_shouldResetMonitoredFilesCounter() throws Exception {
-        // 1) 启动监控 → monitoredFiles = 1, monitoring = true
+        // 1) 启动监控 → monitoredFilesCount = 1, monitoring = true
         Map<String, Object> startResult = service.startMonitoring("app.log");
         assertNotNull(startResult);
         assertEquals("monitor_started", startResult.get("type"));
 
         Map<String, Object> statusAfterStart = service.getMonitorStatus();
         assertEquals(true, statusAfterStart.get("monitoring"));
-        assertEquals("app.log", statusAfterStart.get("currentFile"));
-        assertEquals(1, statusAfterStart.get("monitoredFiles"));
+        Object filesAfterStart = statusAfterStart.get("monitoredFiles");
+        assertTrue(filesAfterStart instanceof java.util.Set, "monitoredFiles should be a Set, was " + (filesAfterStart == null ? "null" : filesAfterStart.getClass()));
+        assertEquals(java.util.Set.of("app.log"), filesAfterStart);
+        assertEquals(1, statusAfterStart.get("monitoredFilesCount"));
 
-        // 2) 停止监控 → monitoredFiles 必须回到 0，且 monitoring = false
+        // 2) 停止监控 → monitoredFilesCount 必须回到 0，且 monitoring = false
         Map<String, Object> stopResult = service.stopMonitoring("app.log");
         assertNotNull(stopResult);
         assertEquals("monitor_stopped", stopResult.get("type"));
@@ -139,8 +141,8 @@ class LogFileRealTimeServiceTest {
         Map<String, Object> statusAfterStop = service.getMonitorStatus();
         assertFalse((Boolean) statusAfterStop.get("monitoring"),
                 "monitoring flag should be false after stopMonitoring()");
-        assertEquals("", statusAfterStop.get("currentFile"));
-        assertEquals(0, statusAfterStop.get("monitoredFiles"),
-                "monitoredFiles counter must reset to 0 on monitor_stopped");
+        assertEquals(java.util.Set.of(), statusAfterStop.get("monitoredFiles"));
+        assertEquals(0, statusAfterStop.get("monitoredFilesCount"),
+                "monitoredFilesCount must reset to 0 on monitor_stopped");
     }
 }
