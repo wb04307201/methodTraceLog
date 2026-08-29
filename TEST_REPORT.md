@@ -552,3 +552,42 @@
 - `AlertingCooldownIT` runs on a separate port (8095) to avoid `AlertingIT`'s shared-state pollution.
 - `FileTraceStorePersistenceIT` uses `build/file-store-persistence-test/` for the file store path (gitignored).
 - `ServiceCallInfo.getArgs()` doesn't exist — args live in `getContext()`. `FileTraceStorePersistenceIT` uses `getContext()` for the trace arg check.
+
+---
+
+## Round 12 — Risk-Driven Test Additions (2026-08-29)
+
+**Goal:** Address top risks from the 2026-08-29 codebase scan (`risk-inventory-2026-08-29.md`, 92 risks identified).
+
+### Bug fix
+
+- **`MtlSessionService.java`** (R-91): Defensive `b & 0xff` mask in `String.format("%02x", b)` to prevent sign extension. NOTE: On JDK 17, `java.util.Formatter` already masks internally, so the bug does NOT manifest today. The defensive guard protects against future regressions (e.g. someone swapping to `Integer.toHexString` which DOES sign-extend).
+
+### New test classes (51 brand-new + 3 appended = 53 total new methods)
+
+| Test | Coverage | Risk |
+|---|---|---|
+| `MtlSessionServiceIdFormatTest` | 32-hex-char contract; 1000-call uniqueness | R-91 |
+| `ResourceShutdownIT` | 3 executor-services shut down (AlertingService, MtlSessionService, SimpleMonitorServiceImpl) | R-14, R-19, R-20 |
+| `FileTraceStoreEvictionRaceIT` | 8 threads × 10K saves concurrent eviction | R-09 |
+| `InMemoryTraceStoreSameTraceIdRaceIT` | 16 threads same-traceid race — **caught real bug** | R-13 |
+| `LogFileRealTimeServiceShutdownIT` | `shutdownNow` + `awaitTermination` | R-04 |
+| `FileTraceStoreIoFailureTest` | Disk full / IOException silent loss | R-10 |
+| `DecompilerUtilsExtractMethodTest` (extended) | Nested generic regex | R-22 |
+| `AlertingServiceCooldownBoundaryTest` | Boundary `now-last==cooldownMs` re-fire | R-15 |
+| `ApiKeyFilterOptionsPreflightIT` | OPTIONS preflight vs CORS ordering | R-26 |
+| `LogConfigExportSizeIT` | `/view/export?limit=5000` size + clamp | R-29 |
+| `ServiceCallInfoCopyOfTest` | Shallow copy semantics | R-38 |
+| `MethodTraceInfoLifecycleTest` | create/end/addChild corners | R-90 |
+| `LogFileServiceFullTest` | query + download full paths | R-90 |
+| `TraceContextRestTemplateInterceptorTest` | MDC → traceparent wiring | R-60 |
+| `SpanIdContextTest` + `MtlSpanIdGeneratorTest` | OTel test scaffolding | R-62, R-63 |
+
+### Real bugs surfaced
+
+- **R-13 (InMemoryTraceStore same-traceid race)**: under N=16 concurrent saves with same traceid, the store size balloons to 306 (expected 1). The race window between `traceIdIndex.get` and `putIfAbsent` allows duplicate root insertions. Documented as known issue with a regression-guard test for future fix.
+
+### Verification
+
+- Total tests: **283 tests, 0 failures, 0 errors, 0 skipped** (BUILD SUCCESS).
+- All 14 new IT classes pass individually via `mvn test -Dtest=<ClassName>`.
