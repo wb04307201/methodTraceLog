@@ -27,8 +27,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <ol>
  *   <li>{@code threshold_3_triggers_webhook_once}：同一 class#method 窗口内 5 次错误
  *       触发 alert，webhook body 携带异常 message。</li>
- *   <li>{@code class_whitelist_excludes_unlisted_classes}：用 StringBuilder 触发
- *       ClassCastException —— 这是 best-effort 用例，只验证 web endpoint 不崩。</li>
+ *   <li>{@code class_whitelist_endpoint_smoke_test}：用 StringBuilder 触发
+ *       ClassCastException —— 这是 <strong>smoke test</strong>，不是真正的 whitelist
+ *       断言。原因：默认 {@code alerting.classes} 为空 list → {@code matchesClassFilter}
+ *       对任何 class 都返回 true；AOP 切点是 {@code TestController#throwFrom} 而不是
+ *       {@code StringBuilder}；因此无法在同一个 {@code AlertingIT} 中既让其他测试告警又
+ *       排除本测试。真正的 whitelist 断言需要独立 harness 并通过 {@code extraProps}
+ *       配置非空的 {@code alerting.classes} —— 超出当前 {@code AlertingIT} 范围，留待
+ *       后续 PR。本测试仅验证 echo-webhook endpoint 能正常服务请求。</li>
  *   <li>{@code renamed_method_name_appears_in_alert}：{@code @AspectLog("renamedThrowing")}
  *       把 methodName 改名为 renamedThrowing，alert body 应只含新名。</li>
  * </ol>
@@ -66,8 +72,42 @@ class AlertingIT {
         assertThat(body).contains("alert-test");
     }
 
+    /**
+     * <strong>Smoke test, NOT a real whitelist assertion.</strong>
+     * <p>
+     * Honest description of what this test verifies:
+     * <ul>
+     *   <li>The {@code /test/_test/echo-webhook} endpoint serves requests (returns a
+     *       non-null body for {@code GET}).</li>
+     *   <li>An {@code AFTER_THROW} from {@code TestController#throwFrom} (regardless
+     *       of the {@code ?class=} parameter) does not crash the host.</li>
+     * </ul>
+     * <p>
+     * Why this is NOT a real whitelist exclusion assertion:
+     * <ul>
+     *   <li>The default {@code alerting.classes} is an empty list, so
+     *       {@code matchesClassFilter(...)} returns {@code true} for every class —
+     *       whitelist exclusion has nothing to filter against.</li>
+     *   <li>The AOP joinpoint is {@code TestController#throwFrom}, not the
+     *       {@code java.lang.StringBuilder} class passed via {@code ?class=}. The
+     *       controller instantiates StringBuilder and tries a
+     *       {@code (RuntimeException)} cast, which throws {@code ClassCastException}
+     *       — but the joinpoint that fires {@code AFTER_THROW} is still the
+     *       controller method, with className {@code cn.wubo.method.trace.log.TestController}.</li>
+     *   <li>Tests 1 and 3 also throw from {@code TestController} and rely on the
+     *       whitelist being empty (i.e. matching all) for their alerts to fire,
+     *       so no single whitelist config can simultaneously let them fire AND
+     *       exclude this test.</li>
+     * </ul>
+     * <p>
+     * A real whitelist assertion would require a separate harness started with
+     * {@code extraProps} configuring a non-empty {@code alerting.classes} whitelist
+     * (e.g. {@code ["cn.wubo.method.trace.log.TestController"]} so this test's
+     * class is excluded while another class would still be allowed). That is
+     * out of scope for this {@code AlertingIT} and is deferred to a future PR.
+     */
     @Test
-    void class_whitelist_excludes_unlisted_classes() {
+    void class_whitelist_endpoint_smoke_test() {
         host.clearWebhook();
         // Throw from java.lang.StringBuilder (not in alerting.classes[])
         try {
