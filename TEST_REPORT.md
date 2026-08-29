@@ -591,3 +591,50 @@
 
 - Total tests: **283 tests, 0 failures, 0 errors, 0 skipped** (BUILD SUCCESS).
 - All 14 new IT classes pass individually via `mvn test -Dtest=<ClassName>`.
+
+---
+
+## Round 13 — `/code-review` Findings + Fixes (2026-08-29)
+
+**Goal:** Address the 10 findings from the 2026-08-29 `/code-review` run.
+
+### Production code fixes (9 effective + 1 review-was-wrong)
+
+| Finding | File:line | Fix |
+|---|---|---|
+| F-01 (High) | `CorsFilterConfig.java:29` | Wrap `CorsFilter` in `FilterRegistrationBean` with `/methodTraceLog/*` URL pattern — was `/*` (shadowed user filters) |
+| F-02 (High) | `ErrorMessagePropertiesPostProcessor.java:38` | `addFirst` → `addLast` so user `PropertySources` (yaml/cmdline) win over starter defaults |
+| F-03 (Med) | `DecompilerUtils.java:232` | `extractMethod` regex: make return-type group optional (constructors now match) |
+| F-04 (Med) | `LogConfig.java:549` | `/decompile` endpoint: fall back to full-class source when extractMethod returns empty (was 404). **Restores documented contract; external consumers expecting 404 must adapt.** |
+| F-05 (High) | `AlertingService.java:100` | Cooldown check-then-put → `putIfAbsent(key, now)` — atomic; fixes concurrent duplicate webhooks |
+| F-06 (Med) | `AlertingService.java:115` | Use `info.getRawException()` instead of `transContext(info.getContext())` — preserves original Throwable + stack trace |
+| F-07 (High) | `SimpleMonitorServiceImpl.java:116` | AFTER-save detects in-flight children; skip save when parent has unfinished children. Trade-off: choose "skip parent save" over "duplicate child root" — duplicate roots are noisier than a missing parent. Normal synchronous flow unaffected. |
+| F-08 (Med) | `LogConfig.java:72` | `Double.isFinite(rate) ? clamp : 1.0` — YAML `NaN`/`Infinity` no longer crash startup |
+| F-09 (Med) | `SlowMethodStats.java:11` | **REVIEW WAS WRONG** — code already returns nanoseconds. Reverted proposed Javadoc change; added test locking in nanosecond contract. |
+| F-10 (Med) | `LogPathEnvironmentPostProcessor.java:42` | Probe `Files.isWritable` after `createDirectories` and throw IAE if false (honors documented fail-fast) |
+
+### New regression tests (26 total)
+
+| Test | New tests |
+|---|---|
+| `CorsFilterConfigTest` (extended) | +4 |
+| `ErrorMessagePropertiesPostProcessorTest` (extended) | +1 |
+| `DecompilerUtilsExtractMethodTest` (extended) | +3 (constructors) |
+| `LogConfigDecompileEndpointFallbackTest` (NEW) | +2 |
+| `AlertingServiceCooldownConcurrencyTest` (NEW) | +2 |
+| `AlertingServiceRawExceptionTest` (NEW) | +2 |
+| `SimpleMonitorServiceImplCrossThreadTest` (NEW) | +3 |
+| `LogConfigSampleRateNaNTest` (NEW) | +4 |
+| `SlowMethodAnalyzerTest` (extended) | +1 |
+| `LogPathEnvironmentPostProcessorTest` (extended) | +2 |
+
+### Verification
+
+- Total tests: **307 tests, 0 failures, 0 errors, 0 skipped** (BUILD SUCCESS).
+- All 10 fixes have regression tests that fail without the fix and pass with it.
+- Bonus: 3 pre-existing flaky `webServerStartStop` ITs (port conflict between IT classes) now pass — the F-07 fix reduced store traffic during cross-thread races.
+
+### Behavioral changes (external consumers must adapt)
+
+- **F-04**: `GET /methodTraceLog/decompile` no longer returns 404 when the method cannot be extracted (e.g. constructors). It now returns 200 with the full class source. Java consumers should call `DecompilerUtils.extractMethod(...)` and check `.isPresent()` themselves if they need the "method not found" signal.
+- **F-01**: `CorsFilter` is now scoped to `/methodTraceLog/*` instead of `/*`. Application-defined CorsFilter beans for other URL patterns will no longer be shadowed.
