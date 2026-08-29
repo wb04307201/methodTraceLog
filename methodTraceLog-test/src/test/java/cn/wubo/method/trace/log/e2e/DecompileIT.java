@@ -13,9 +13,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 端到端验证 {@code GET /methodTraceLog/decompile}(CFR 反编译端点)的两条主路径:
  * <ul>
- *   <li>已存在的方法 -&gt; 200 + 只含该方法的 Java 源码</li>
- *   <li>不存在的方法 -&gt; 404(由 {@code DecompilerUtils.extractMethod} 返回 empty 触发
- *       {@code ResponseStatusException(NOT_FOUND)},见 {@code LogConfig.decompileRouter})</li>
+ *   <li>已存在的方法 -&gt; 200 + 只含该方法的 Java 源码(由 {@code DecompilerUtils.extractMethod} 切出)</li>
+ *   <li>不存在的方法 / 切不到时(例如构造器 methodName == className) -&gt; 200 + 整类源码
+ *       (fallback 行为,与 {@code LogConfig.decompileRouter} 的 javadoc 承诺一致)</li>
  * </ul>
  *
  * <p><b>为什么断言签名而不是裸 "hello"(per brief 关注点 3):</b>
@@ -30,11 +30,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 与代理无关。所以反编译结果必须是原始方法体 —— 下面用 {@code testComponent} 的委托调用
  * 来锁死这一点(代理类的 hello 只会是 {@code MethodProxy} 转发,不含该字段引用)。</p>
  *
- * <p><b>关于 404 的 try/catch(per brief 关注点 4):</b>
- * {@link org.springframework.boot.test.web.client.TestRestTemplate} 装的是
- * {@code NoOpResponseErrorHandler},4xx 不抛异常而是正常返回 ResponseEntity。
- * 但如果哪天 harness 换成裸 {@code RestTemplate},就会抛 {@link HttpClientErrorException}。
- * 两条路都断言 404,保证测试语义不随 HTTP client 实现漂移。</p>
+ * <p><b>关于 fallback(per Round 13 关注点 4):</b>
+ * F-04 修复后,未知方法名不再 404 —— 改为 fallback 返回全量类源码,
+ * 与 {@code LogConfig.decompileRouter} javadoc 的契约一致。这让 LLM 场景下"切不到就拿全量"更鲁棒。</p>
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class DecompileIT {
@@ -89,23 +87,34 @@ class DecompileIT {
                 .doesNotContain("class TestService");
     }
 
+    /**
+     * F-04 修复:未知 methodName 不再返回 404,而是 fallback 返回全量类源码。
+     * <p>
+     * 行为契约:200 + body 应包含整类源码标志(例如 "class TestService")，但不应
+     * 凭空"虚构"一个叫 doesNotExist 的方法。修复前会抛 NOT_FOUND；修复后保留
+     * 客户端的容错性（LLM 给错方法名仍能拿到全量）。
+     */
     @Test
-    void decompile_unknown_method_returns_404() {
-        try {
-            var resp = host.http().getForEntity(
-                    "http://localhost:" + PORT + "/methodTraceLog/decompile"
-                            + "?className=" + TARGET_CLASS + "&methodName=doesNotExist",
-                    String.class);
-            assertThat(resp.getStatusCode().value())
-                    .as("unknown methodName should yield 404 (extractMethod -> empty -> "
-                            + "ResponseStatusException(NOT_FOUND)); got %s body=%s",
-                            resp.getStatusCode(), resp.getBody())
-                    .isEqualTo(404);
-        } catch (HttpClientErrorException e) {
-            // 只有在 harness 改用会抛 4xx 的 RestTemplate 时才会走到这里。
-            assertThat(e.getStatusCode().value())
-                    .as("unknown methodName should yield 404; got %s", e.getStatusCode())
-                    .isEqualTo(404);
-        }
+    void decompile_unknown_method_fallsBackToFullClassSource() {
+        var resp = host.http().getForEntity(
+                "http://localhost:" + PORT + "/methodTraceLog/decompile"
+                        + "?className=" + TARGET_CLASS + "&methodName=doesNotExist",
+                String.class);
+
+        assertThat(resp.getStatusCode().value())
+                .as("unknown methodName 应 fallback 到 200（不再 404）; got %s body=%s",
+                        resp.getStatusCode(), resp.getBody())
+                .isEqualTo(200);
+
+        String body = resp.getBody();
+        assertThat(body)
+                .as("fallback body should not be null/blank")
+                .isNotNull()
+                .isNotBlank();
+
+        // 关键：body 应包含整类源码标志（与"只切出方法"路径区分）
+        assertThat(body)
+                .as("fallback body should contain the class shell (e.g. 'class TestService'); got:%n%s", body)
+                .contains("class TestService");
     }
 }

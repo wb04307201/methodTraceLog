@@ -174,7 +174,7 @@ class DecompilerUtilsExtractMethodTest {
     void nested_generic_signature_hasBalancedBraces() {
         // 抽出后大括号必须配平 —— 这是 extractMethod 的硬约束
         String src = "class A {\n" +
-                "  public java.util.Map<java.lang.String, java.util.List<java.util.Map<java.lang.String, java.lang.Integer>>> aggregate() {\n" +
+                "  public java.util.Map<java.lang.String, java.util.List<java.util.Map<java.lang.String, java.util.Integer>>> aggregate() {\n" +
                 "    if (true) { return null; }\n" +
                 "    return new java.util.HashMap<>();\n" +
                 "  }\n" +
@@ -187,5 +187,58 @@ class DecompilerUtilsExtractMethodTest {
                 body.chars().filter(c -> c == '{').count(),
                 body.chars().filter(c -> c == '}').count(),
                 "braces must be balanced; got: " + body);
+    }
+
+    // === Fix Round 13: 构造器（无返回类型） ===
+
+    @Test
+    void extracts_constructor_noReturnType() {
+        // 构造器签名格式是 "public ClassName(...) {" —— 没有返回类型。
+        // 修复前正则要求 "返回类型 + \s+" 紧贴 methodName，导致构造器永远切不到。
+        String src = "public class ArrayList {\n" +
+                "  public ArrayList() { this(10); }\n" +
+                "  public ArrayList(int initialCapacity) { /* setup */ }\n" +
+                "  public int size() { return 0; }\n" +
+                "}\n";
+        Optional<String> m = DecompilerUtils.extractMethod(src, "ArrayList");
+        Assertions.assertTrue(m.isPresent(), "无返回类型的构造器应被命中（methodName == className）; got empty. src=" + src);
+        Assertions.assertTrue(m.get().contains("ArrayList("), "got: " + m.get());
+        Assertions.assertTrue(m.get().contains("this(10)"), "构造器 body 应被包含; got: " + m.get());
+        // 抽出后大括号必须配平
+        Assertions.assertEquals(
+                m.get().chars().filter(c -> c == '{').count(),
+                m.get().chars().filter(c -> c == '}').count(),
+                "braces must be balanced; got: " + m.get());
+    }
+
+    @Test
+    void extracts_constructor_overload_doesNotSwallowNextMethod() {
+        // 多构造器重载：extractMethod("ArrayList") 只命中第一个出现的签名行
+        // （public ArrayList()），但绝不能把后面的 size() 也吞进去。
+        String src = "public class ArrayList {\n" +
+                "  public ArrayList() { this(10); }\n" +
+                "  public ArrayList(int initialCapacity) { /* setup */ }\n" +
+                "  public int size() { return 0; }\n" +
+                "}\n";
+        Optional<String> m = DecompilerUtils.extractMethod(src, "ArrayList");
+        Assertions.assertTrue(m.isPresent());
+        Assertions.assertTrue(m.get().contains("ArrayList("), "got: " + m.get());
+        Assertions.assertFalse(m.get().contains("public int size()"),
+                "must not swallow next method; got: " + m.get());
+    }
+
+    @Test
+    void extracts_realDecompiledConstructor_fromRuntimeClass() {
+        // 端到端：ArrayList 的构造器（methodName == className）能被 extractMethod 命中
+        String src = DecompilerUtils.decompile("java.util.ArrayList", "ArrayList");
+        String stripped = DecompilerUtils.removeAnnotations(src);
+        Optional<String> m = DecompilerUtils.extractMethod(stripped, "ArrayList");
+        Assertions.assertTrue(m.isPresent(), "CFR decompile + extractMethod should find ArrayList constructor; got empty. stripped=" + stripped);
+        Assertions.assertTrue(m.get().contains("ArrayList("), "got: " + m.get());
+        // 抽出后大括号必须配平
+        Assertions.assertEquals(
+                m.get().chars().filter(c -> c == '{').count(),
+                m.get().chars().filter(c -> c == '}').count(),
+                "braces must be balanced; got: " + m.get());
     }
 }

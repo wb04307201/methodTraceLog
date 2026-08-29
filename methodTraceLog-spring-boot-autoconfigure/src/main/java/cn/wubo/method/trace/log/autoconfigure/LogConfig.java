@@ -64,12 +64,14 @@ public class LogConfig {
 
     @Bean
     public Sampler mtlSampler(MethodTraceLogProperties properties) {
-        double rate = properties.getLog() == null || properties.getLog().getSampleRate() == null
-                ? 1.0
-                : properties.getLog().getSampleRate();
+        Double raw = properties.getLog() == null ? null : properties.getLog().getSampleRate();
+        double rate = raw == null ? 1.0 : raw;
         // clamp 到 [0.0, 1.0]：HeadBasedSampler 构造器对越界值会抛 IllegalArgumentException，
         // 导致整个 Spring 上下文启动失败。把超界值夹到合法区间即可保持应用可用。
-        rate = Math.max(0.0, Math.min(1.0, rate));
+        // 另：必须先用 Double.isFinite 把 NaN / Infinity 排除掉 —— Math.max/min 在 NaN
+        // 上行为未定义（NaN 会被传播），最终 HeadBasedSampler 拿到 NaN 同样抛 IAE。
+        // NaN / Infinity 走 1.0 兜底（"采样一切"是更安全的语义）。
+        rate = Double.isFinite(rate) ? Math.max(0.0, Math.min(1.0, rate)) : 1.0;
         return new HeadBasedSampler(rate);
     }
 
@@ -524,7 +526,8 @@ public class LogConfig {
      * GET /methodTraceLog/decompile?className=foo.Bar&methodName=baz&timeoutSeconds=10
      * <p>
      * 返回 String 文本（plain/text），内容为去掉注解后、只含目标方法的 Java 源码；
-     * 若无法从整类源码中切出目标方法，则 fallback 返回整类源码。
+     * 若无法从整类源码中切出目标方法（例如方法名为构造器 {@code Foo}，或正则
+     * 因为 CFR 病态输出没匹配上），则 fallback 返回整类源码。
      * 异常会由 RouterFunction 框架包装为 4xx/5xx + 简单 message body。
      */
     private void decompileRouter(RouterFunctions.Builder builder, MethodTraceLogProperties properties) {
@@ -545,10 +548,10 @@ public class LogConfig {
                     .orElse(defaultTimeout);
             String src = DecompilerUtils.decompile(className, methodName, timeout);
             String stripped = DecompilerUtils.removeAnnotations(src);
-            // 只回目标方法；切不到就 404（之前是 fallback 全量源码，导致 DOA 体验）
+            // 优先返回切出的方法源码；切不到时 fallback 到全量类源码（保留 javadoc 中承诺的行为）。
+            // Fallback 涵盖：构造器（无返回类型）、CFR 输出换行/格式特殊让正则没匹配上、etc.
             String body = DecompilerUtils.extractMethod(stripped, methodName)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                            "Method not found: " + className + "#" + methodName));
+                    .orElse(stripped);
             return ServerResponse.ok().contentType(MediaType.TEXT_PLAIN).body(body);
         });
     }

@@ -99,4 +99,32 @@ class SlowMethodAnalyzerTest {
         Assertions.assertTrue(stats.get(0).getP99() > 0);
         Assertions.assertTrue(stats.get(0).getP50() > 0);
     }
+
+    /**
+     * F-09 回归：SlowMethodStats 的 p50/p95/p99/max 单位是<b>纳秒</b>，与 Micrometer
+     * {@code SimpleMeterRegistry} 上 Timer 的 base time unit 一致。
+     * <p>
+     * 实测 250ms 采样 → p50/p95/p99/max 全部为 2.5E8 = 250,000,000ns。
+     * <p>
+     * 锁住这条契约：未来若有人把单位改回秒（一些 Micrometer 后端确实会用秒），
+     * 这个测试会立即失败（值会变成 0.25），提醒维护者同步修改所有调用方。
+     */
+    @Test
+    @DisplayName("p50/p95/p99/max 单位是纳秒（Micrometer Timer base time unit）")
+    void values_are_in_nanoseconds() {
+        Timer t = Timer.builder("method.execution.time")
+                .tag("className", "S").tag("methodSignature", "m()").tag("action", "AFTER_RETURN")
+                .register(registry);
+        // 100 次 250ms
+        for (int i = 0; i < 100; i++) t.record(Duration.ofMillis(250));
+        var stats = analyzer.analyze(5, 10);
+        Assertions.assertEquals(1, stats.size());
+        var s = stats.get(0);
+        // 因为 Timer 未开 percentile histogram，p50/p95/p99 都回落到 mean —— 即 2.5E8ns
+        double expected = 250_000_000.0;
+        Assertions.assertEquals(expected, s.getP50(), 1.0, "p50 必须是 2.5E8ns（250ms），单位是纳秒；实际: " + s.getP50());
+        Assertions.assertEquals(expected, s.getP95(), 1.0, "p95 必须是 2.5E8ns（250ms），单位是纳秒；实际: " + s.getP95());
+        Assertions.assertEquals(expected, s.getP99(), 1.0, "p99 必须是 2.5E8ns（250ms），单位是纳秒；实际: " + s.getP99());
+        Assertions.assertEquals(expected, s.getMax(),  1.0, "max 必须是 2.5E8ns（250ms），单位是纳秒；实际: " + s.getMax());
+    }
 }

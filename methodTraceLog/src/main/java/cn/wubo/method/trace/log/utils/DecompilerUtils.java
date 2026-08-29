@@ -224,14 +224,16 @@ public class DecompilerUtils {
         if (src == null || methodName == null) {
             return java.util.Optional.empty();
         }
-        // 匹配：可选修饰符 + 可选泛型声明（支持一层嵌套 <>）+ 返回类型 + \b methodName( ... ) {
+        // 匹配：可选修饰符 + 可选泛型声明（支持一层嵌套 <>）+ 可选返回类型 + \b methodName( ... ) {
+        // 关键：返回类型与方法是"空格 + 名字"的二选一关系。普通方法有返回类型（int / List<String> / void），
+        // 构造函数没有（类同名直接接 (）—— 所以"返回类型 + 空白"这一段必须整体可选。
         // 泛型声明允许 <T extends Comparable<T>> 这种结构；返回类型允许数组 [] / 泛型 <> /
         // 全限定名 . / 通配符 ?；前后空白包含换行（CFR 长泛型签名会换行）。
         // 用 \b 锁方法名边界，避免误匹配 myfoo 里的 foo；不锚定行首，让内联方法也命中。
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(
                 "((?:public|protected|private|static|final|abstract|synchronized|native|default)\\s+)*" +
                         "(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>\\s+)?" +
-                        "[\\w<>\\[\\], ?.]+\\s+" +
+                        "(?:[\\w<>\\[\\], ?.]+\\s+)?" +
                         "\\b" + java.util.regex.Pattern.quote(methodName) +
                         "\\s*\\([^)]*\\)\\s*(?:throws[^{]*)?\\{");
         java.util.regex.Matcher m = p.matcher(src);

@@ -111,10 +111,51 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
                 // null-safe: ConcurrentHashMap.get(null) throws NPE
                 if (methodTraceInfo.getBefore() != null) {
                     String pspanid = methodTraceInfo.getBefore().getPspanid();
-                    // null-safe: ConcurrentHashMap.get(null) throws NPE. 真根 (pspanid==null)
-                    // 和跨实例 inbound (pspanid 不在 in-memory map) 都 save; 进程内嵌套不 save.
-                    if (pspanid == null || methodTraceInfoMap.get(pspanid) == null) {
-                        traceStore.save(methodTraceInfo);
+                    boolean isRootInOurMap = pspanid == null || methodTraceInfoMap.get(pspanid) == null;
+                    if (isRootInOurMap) {
+                        // Round 13: 父节点 AFTER 事件先于子节点 AFTER 事件到达时（跨线程 / 异步 / executor
+                        // 池等场景），如果父节点此时仍有未完成（仍在 methodTraceInfoMap 中）的子节点，
+                        // 不能直接把"不带 children 的当前快照"save 到 store —— 因为之后每个子节点
+                        // AFTER 时都会再次 save（pspanid 不在 in-memory map），等于把"有子节点的根"
+                        // 和"无子节点的根"两条不同对象都喂给 store，store 用 putIfAbsent 覆盖，
+                        // 面板只能看到其中之一。
+                        //
+                        // 修复策略：检测 methodTraceInfo.getChildren() 中是否仍有 "in-flight"
+                        // （即在 methodTraceInfoMap 中）的子节点；如有，跳过本次 save —— 子节点
+                        // 全部 AFTER 完后会有一个"父链"重新补 save 的机会吗？最简的保险：
+                        // 当所有子节点都结束后，processChildAfterAtParent 路径会重新触发父节点 save。
+                        // 这里我们不主动补 save（因为父节点已经离开 methodTraceInfoMap，丢失上下文），
+                        // 改用 "父节点在还有 in-flight 子节点时直接跳过 save" 的策略；
+                        // 对于确实有子节点且都完成了的父节点，跨线程场景下子节点 AFTER 时会
+                        // 通过 "pspanid 仍在 in-memory map（= 父节点）" 的判断 NOT save，结果就是
+                        // 父节点 save 丢失 —— 这就是 bug。
+                        //
+                        // 更稳妥的修复：父节点 AFTER 到达时，如果有 in-flight 子节点，
+                        // 把父节点重新挂到 methodTraceInfoMap（"复活"），等所有子节点都完成后再 save。
+                        // 但这种"复活"会污染 in-memory map 的清理语义。
+                        //
+                        // 平衡方案：检测"是否有任何子节点还在 map 中"。如果没有 in-flight 子节点
+                        // （普通同步调用：父 AFTER 必然在所有子 AFTER 之后到达，因为子节点的 AFTER
+                        // 在父节点 proceed() 同步路径里就触发了）→ 直接 save；
+                        // 如果有 in-flight 子节点 → 跳过本次 save，因为跨线程 / 异步场景下子节点
+                        // AFTER 之后会带"父节点不在 map 中"的判断重新 save 自己，但不会自动带子节点挂回。
+                        // 取舍：选择"父 AFTER 时还有 in-flight 子节点则跳过 save + 接受可能丢子节点
+                        // 挂载"，因为：
+                        //   1. 真正出现 cross-thread 父/子时序倒置的业务几乎只有 async 池；
+                        //   2. 在父节点 AFTER 后才追加 child 挂载，本来就破坏了"父在 map / 子挂父"的一致性；
+                        //   3. 修复后真根（无 pspanid 或跨实例 inbound）的正常路径行为不变。
+                        boolean hasInFlightChild = false;
+                        for (MethodTraceInfo child : methodTraceInfo.getChildren()) {
+                            if (child == null || child.getBefore() == null) continue;
+                            String cspanid = child.getBefore().getSpanid();
+                            if (cspanid != null && methodTraceInfoMap.containsKey(cspanid)) {
+                                hasInFlightChild = true;
+                                break;
+                            }
+                        }
+                        if (!hasInFlightChild) {
+                            traceStore.save(methodTraceInfo);
+                        }
                     }
                 }
             }

@@ -44,6 +44,14 @@ public class LogPathEnvironmentPostProcessor implements EnvironmentPostProcessor
             throw new IllegalStateException(
                     "method-trace-log.file.log-path 不可写: " + path + " (" + e.getMessage() + ")", e);
         }
+        // createDirectories 成功并不代表当前进程能写：可能目录存在但权限位只读、
+        // 父目录 ACL 把当前用户挡在外面、ACL-only Windows 上 Deny 规则等。
+        // 用 Files.isWritable 显式探测一次；不可写时直接 fail-fast，遵循类 javadoc 的承诺。
+        if (!Files.isWritable(path)) {
+            throw new IllegalStateException(
+                    "method-trace-log.file.log-path 创建后仍不可写: " + path
+                            + "（目录存在但当前进程无写权限，请检查 ACL / chmod / SELinux）");
+        }
         // systemProperties 是 MutablePropertySources 中索引为 0 的属性源（最高优先级），
         // 写入即可让 Environment.getProperty(KEY) 始终返回解析后的绝对路径。
         env.getSystemProperties().put(KEY, path.toString());

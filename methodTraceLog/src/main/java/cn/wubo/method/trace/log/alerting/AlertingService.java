@@ -96,13 +96,29 @@ public class AlertingService extends AbstractCallService {
         // 2. 未跨阈值不告警
         if (q.size() < props.getThreshold().getErrorCount()) return;
 
-        // 3. cooldown 检查：cooldownSeconds=0 时不抑制
-        Long last = cooldownUntil.get(key);
+        // 3. cooldown 检查（原子版）：用 putIfAbsent 而不是 get + put。
+        //    高并发下 get + put 之间会被多个线程同时进入临界区，
+        //    导致 N 个线程都通过 "now - last >= cooldownMs" 检查、各自 put 各自己的时间戳、
+        //    各自发 webhook —— 抑制失效。
+        //    putIfAbsent 返回旧值：null = 之前没记录过（首次进入），通过；
+        //    非 null = 已经被别的线程抢到了，本次直接放弃。
         long cooldownMs = props.getCooldownSeconds() * 1000L;
-        if (last != null && now - last < cooldownMs) return;
-        cooldownUntil.put(key, now);
+        Long prior = cooldownUntil.putIfAbsent(key, now);
+        if (prior != null) {
+            // 已被别的线程占位；只有在 cooldown 真正过期后才放行。
+            if (now - prior < cooldownMs) return;
+            // cooldown 边界：尝试覆盖为本次时间戳（其它线程可能已经覆盖了 → 接受失败）
+            if (!cooldownUntil.replace(key, prior, now)) return;
+        }
 
         // 4. 构造事件
+        // 优先用原始 Throwable（info.getRawException() —— LogAspect 已经在
+        // LogAspect.java:220 写入），调 toString() 拿到完整 stacktrace；
+        // 没有 rawException 时（极少数场景，例如直接构造 ServiceCallInfo 喂进来）
+        // 才退回 String.valueOf(transContext(context))。
+        String errorText = info.getRawException() != null
+                ? stackTraceToString(info.getRawException())
+                : String.valueOf(transContext(info.getContext()));
         AlertEvent event = new AlertEvent(
                 UUID.randomUUID().toString(),
                 now,
@@ -112,10 +128,28 @@ public class AlertingService extends AbstractCallService {
                 info.getTraceid(),
                 q.size(),
                 props.getThreshold().getWindowSeconds(),
-                truncate(String.valueOf(transContext(info.getContext())), MAX_SAMPLE_ERROR));
+                truncate(errorText, MAX_SAMPLE_ERROR));
 
         // 5. 入 ring buffer + 6. 发 webhook（失败不抛）
         trigger(event);
+    }
+
+    /**
+     * 把 Throwable 的类名 + message + 完整 stacktrace 拼成单字符串。
+     * 不同于 {@link AbstractCallService#transContext(Object)} 截断到 10 行 + 换行格式，
+     * 告警需要全栈以便运维快速定位。
+     */
+    private static String stackTraceToString(Throwable t) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(t.getClass().getName());
+        if (t.getMessage() != null) {
+            sb.append(": ").append(t.getMessage());
+        }
+        sb.append('\n');
+        for (StackTraceElement el : t.getStackTrace()) {
+            sb.append("\tat ").append(el).append('\n');
+        }
+        return sb.toString();
     }
 
     /**
