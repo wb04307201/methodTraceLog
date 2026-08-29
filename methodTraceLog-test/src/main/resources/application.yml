@@ -27,6 +27,14 @@ method-trace-log:
     scan-lines: 10000  # 流式扫描的最大行数上限(也是内存的实际安全网,与分页 pageSize 无关)。1~2MB 内存,中等生产服务能覆盖 1~2 小时窗口
   security:
     api-key: ${METHOD_TRACE_LOG_API_KEY:}    # 从环境变量读取,默认空(dev 模式,不鉴权)
+    cors:
+      allowed-origins:
+        - "http://localhost:3000"
+      allowed-methods:
+        - GET
+        - POST
+      allowed-headers:
+        - "*"
   decompile:
     timeout-seconds: 10
 management:
