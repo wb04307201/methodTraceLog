@@ -438,3 +438,42 @@
 - `methodTraceLog-test/pom.xml` (surefire `*IT` includes + `reuseForks=false`)
 - `methodTraceLog-spring-boot-autoconfigure/src/main/java/cn/wubo/method/trace/log/autoconfigure/CorsFilterConfig.java` (dropped broken condition)
 - `methodTraceLog-spring-boot-autoconfigure/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` (added missing CORS config)
+
+---
+
+## Round 9 — Complete pspanid Cross-Instance Fix (2026-08-29)
+
+**Goal:** End-to-end fix for the `pspanid` MDC key mismatch — `LogAspect` correctly derives `pspanid` from the upstream `traceparent` header's `parent-id`, AND `SimpleMonitorServiceImpl` persists cross-instance inbound traces as top-level entries.
+
+**Background:** Ruling 6 (Round 7) identified the product gap; Round 8 deferred the fix because the naive LogAspect-only change broke the store's "pspanid==null means root" assumption. Round 9 fixes it as a coordinated two-file change.
+
+### Changes
+
+- `methodTraceLog/src/main/java/cn/wubo/method/trace/log/LogAspect.java:168`
+  - Before: `pspanid = prespanid`
+  - After: `pspanid = prespanid != null ? prespanid : prepspanid`
+  - In-process nested (prespanid non-null): use calling span's id. Cross-instance inbound (prespanid null): use upstream parent's span id from traceparent.
+
+- `methodTraceLog/src/main/java/cn/wubo/method/trace/log/impl/monitor/SimpleMonitorServiceImpl.java`
+  - Save condition changed from `pspanid == null` to `methodTraceInfoMap.get(pspanid) == null` (null-safe).
+  - True root (pspanid null) → save. Cross-instance inbound (pspanid set but parent not in our in-memory map) → save as top-level entry. In-process nested (parent IS in map) → attach as child, no save.
+
+- `methodTraceLog-test/src/test/java/cn/wubo/method/trace/log/e2e/OtelPropagationIT.java`
+  - KNOWN GAP assertion: `isNull()` → `isNotNull()` (encodes post-fix contract).
+
+### Verification
+
+- All 214 tests pass (188 unit + 26 e2e + 1 OTel best-effort skip).
+- `TracePropagationIT`: cross-instance inbound trace now appears in `/view/list` (test still passes 2/2).
+- `OtelPropagationIT`: still skips in default config (OTel SDK not loaded); KNOWN GAP signal will FAIL if LogAspect regresses.
+
+### Behavioral changes
+
+- `/view/list` now returns BOTH true roots AND cross-instance inbound traces (was: only true roots).
+- `/view/traceid?id=` returns the full tree for any traceid, including cross-instance inbound trees.
+- The web panel will display cross-instance inbounds as top-level entries — cosmetic consideration for future rounds.
+
+### Known limitations (deferred to future rounds)
+
+- Same-JVM cross-thread propagation not tested (no specific scenario where this matters in current code).
+- Panel UI may want a visual distinction between "true root" (pspanid null) and "cross-instance inbound" (pspanid set to upstream) — tracked as panel polish item.
