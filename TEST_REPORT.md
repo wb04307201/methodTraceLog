@@ -638,3 +638,45 @@
 
 - **F-04**: `GET /methodTraceLog/decompile` no longer returns 404 when the method cannot be extracted (e.g. constructors). It now returns 200 with the full class source. Java consumers should call `DecompilerUtils.extractMethod(...)` and check `.isPresent()` themselves if they need the "method not found" signal.
 - **F-01**: `CorsFilter` is now scoped to `/methodTraceLog/*` instead of `/*`. Application-defined CorsFilter beans for other URL patterns will no longer be shadowed.
+
+---
+
+## Round 14 — MCP Module Risk-Driven Fixes (2026-08-29)
+
+**Goal:** Address top risks from the 2026-08-29 MCP module scan (`mcp-risk-inventory-2026-08-29.md`, 20 risks identified).
+
+### Production fixes (8 effective)
+
+| Risk | File | Fix |
+|---|---|---|
+| MCP-R-01 (Critical) | `MethodTraceLogMcpApplication.java` | Two `RestClient` beans via `JdkClientHttpRequestFactory` with 3s connect / 30s+120s read timeouts |
+| MCP-R-02 (Critical) | `MethodTraceLogMcpService.java` | `safeGet`/`safePost` + `toErrorJson` + cause-chain walker; returns structured error JSON instead of leaking stack traces |
+| MCP-R-03 (High) | `SizeLimitingClientHttpRequestFactory.java` (NEW) | 16 MiB body cap (Content-Length pre-check + streaming BoundedInputStream byte counter) |
+| MCP-R-04 (High) | `MethodTraceLogMcpService.java` | `ToolOp` enum + `doWithRetry` with 2 retries / 100-500ms backoff for idempotent GETs only |
+| MCP-R-05 (High) | `MethodTraceLogMcpApplication.java` | `@PostConstruct validateHosts()` rejects empty / duplicate / blank-name / blank-url / non-http(s) |
+| MCP-R-06 (High) | `MethodTraceLogMcpApplication.java` | `URI.create` validation + http(s)-only scheme check |
+| MCP-R-10 (Medium) | `MethodTraceLogMcpServiceTest.java` (extended) | 33 new tests covering error/timeout/size/encoding paths + Spring-context boot validation |
+| MCP-R-11 (Medium) | `MethodTraceLogMcpService.java:300-302` | `URLEncoder.encode(s, UTF_8).replace("+", "%20")` for RFC 3986 path encoding; flipped existing test that enshrined the wrong encoding |
+
+### Design note (MCP-R-03)
+
+Used a delegating `SizeLimitingClientHttpRequestFactory` (~80 lines) rather than `ExchangeStrategies.maxInMemorySize` because the latter doesn't exist on `RestClient.Builder` in Spring 6.2 (only on `WebClient.Builder`, which would require pulling in `spring-webflux` — too heavy for a stdio-only MCP server).
+
+### Verification
+
+- MCP module: **46 tests, 0 failures, 0 errors, 0 skipped** (was 13 → +33)
+- Main test module: **307 tests, 0 failures, 0 errors, 0 skipped** (unchanged)
+- All 8 fixes have passing regression tests
+
+### Remaining MCP risks (deferred to future rounds)
+
+- MCP-R-08 (graceful shutdown)
+- MCP-R-09 (HTTP API key warning)
+- MCP-R-13 (`/actuator` may be off)
+- MCP-R-14 (empty hosts[]) — partially addressed by MCP-R-05 (`@PostConstruct` validates non-empty)
+- MCP-R-15 (MCP protocol test)
+- MCP-R-16 (trailing `?`)
+- MCP-R-17 (unbounded traceId)
+- MCP-R-18 (POST body size cap)
+- MCP-R-19 (per-call timeout variance)
+- MCP-R-20 (audit logging)
