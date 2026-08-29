@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * methodTraceLog MCP 工具集。
@@ -63,10 +64,48 @@ import java.util.Optional;
  *       ({@code URLEncoder.encode(s, UTF_8).replace("+", "%20")}) rather than
  *       form-encoded {@code URLEncoder} output.</li>
  * </ul>
+ *
+ * <p><b>Round 15 hardening:</b>
+ * <ul>
+ *   <li>(MCP-R-09) {@link #validateHosts()} logs a WARN for every host whose {@code url} starts
+ *       with {@code http://} <em>and</em> whose {@code apiKey} is non-empty, so sending a static
+ *       API key in cleartext over the wire surfaces loudly at startup instead of silently
+ *       leaking in production logs / traces.</li>
+ *   <li>(MCP-R-13) {@link #ping} now tries {@code /actuator/health} first and falls back to
+ *       {@code /methodTraceLog/view/callServices} as a smoke test, so hosts that do not expose
+ *       the bare {@code /actuator} endpoint still report healthy.</li>
+ *   <li>(MCP-R-16) {@link #getMethodTraceList} no longer emits a trailing {@code ?} when all
+ *       filters are {@code null}.</li>
+ *   <li>(MCP-R-17) {@link #getMethodTraceByTraceId} validates {@code traceId} against
+ *       {@link #TRACE_ID_PATTERN} ({@code ^[A-Za-z0-9_-]{1,128}$}); 1 MB strings and slashes
+ *       now produce a friendly error instead of round-tripping to the host.</li>
+ *   <li>(MCP-R-18) {@link #queryLogContent} / {@link #downloadLog} clamp
+ *       {@code fileName} ≤ {@link #MAX_FILENAME_LENGTH} (256) chars,
+ *       {@code keyword} ≤ {@link #MAX_KEYWORD_LENGTH} (1024) chars, and validate
+ *       {@code startTime} / {@code endTime} against {@link #ISO_8601_PATTERN}.</li>
+ *   <li>(MCP-R-19) {@link #safeGet} / {@link #safePost} now record which {@link RestClient}
+ *       (fast / long) was used on the most recent call ({@link #wasLastCallLongClient()} +
+ *       {@link #getLastCallStats()}); routing is verified by {@code MethodTraceLogMcpServiceTest}.</li>
+ *   <li>(MCP-R-20) Every tool invocation emits a single structured INFO audit line on
+ *       {@code stderr} (via the SLF4J logger, which {@code logback-spring.xml} routes to
+ *       {@code System.err}) in the form
+ *       {@code tool=... host=... path=... status=... duration=NNms}.</li>
+ * </ul>
  */
 public class MethodTraceLogMcpService {
 
     private static final Logger log = LoggerFactory.getLogger(MethodTraceLogMcpService.class);
+
+    /**
+     * SLF4J logger name for the structured audit trail. Written to {@code stderr} via
+     * {@code logback-spring.xml}; never to {@code stdout} (which is reserved for JSON-RPC).
+     */
+    static final String AUDIT_LOGGER_NAME = "mcp.audit";
+
+    /**
+     * Dedicated audit logger so the {@code audit} lines are easy to filter / ship to a SIEM.
+     */
+    private static final Logger auditLog = LoggerFactory.getLogger(AUDIT_LOGGER_NAME);
 
     /**
      * Initial retry backoff in milliseconds. Subsequent retries multiply by
@@ -84,9 +123,45 @@ public class MethodTraceLogMcpService {
      */
     static final int RETRYABLE_TOTAL_ATTEMPTS = 3;
 
+    /**
+     * Maximum allowed length of a {@code traceId}. Anything longer is rejected with a
+     * friendly error (MCP-R-17).
+     */
+    static final int MAX_TRACE_ID_LENGTH = 128;
+
+    /**
+     * Maximum allowed length of a {@code fileName} (MCP-R-18).
+     */
+    static final int MAX_FILENAME_LENGTH = 256;
+
+    /**
+     * Maximum allowed length of a {@code keyword} filter (MCP-R-18).
+     */
+    static final int MAX_KEYWORD_LENGTH = 1024;
+
+    /**
+     * Pattern used to validate trace IDs. Matches the {@code IdUtil.fastSimpleUUID()-style}
+     * values produced by the framework plus most user-supplied identifiers.
+     */
+    static final Pattern TRACE_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]{1,128}$");
+
+    /**
+     * ISO 8601 date / date-time pattern used to validate {@code startTime} / {@code endTime}.
+     * Accepts {@code 2026-08-29}, {@code 2026-08-29T12:34:56Z}, {@code 2026-08-29T12:34:56.789+08:00}.
+     */
+    static final Pattern ISO_8601_PATTERN = Pattern.compile(
+            "^\\d{4}-\\d{2}-\\d{2}([Tt ]\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:?\\d{2}))?$");
+
     private final List<MethodTraceLogMcpProperties.HostInfo> hosts;
     private final RestClient fastClient;
     private final RestClient longClient;
+
+    /**
+     * Mutable stats about the most recent {@link #safeGet} / {@link #safePost} call. Updated
+     * synchronously on the calling thread. Used by tests (MCP-R-19) to verify which RestClient
+     * was used and how long the call took.
+     */
+    private volatile CallStats lastCall = CallStats.empty();
 
     /**
      * Backward-compatible constructor: a single {@link RestClient} is used for both fast and long
@@ -136,11 +211,40 @@ public class MethodTraceLogMcpService {
     }
 
     /**
+     * Snapshot of the most recent {@link #safeGet} / {@link #safePost} call. Used by tests
+     * (MCP-R-19) and (informally) by the audit log on the failure path.
+     */
+    static final class CallStats {
+        final String tool;
+        final String host;
+        final String path;
+        final String status;
+        final long durationMs;
+        final boolean longClient;
+
+        CallStats(String tool, String host, String path, String status, long durationMs, boolean longClient) {
+            this.tool = tool;
+            this.host = host;
+            this.path = path;
+            this.status = status;
+            this.durationMs = durationMs;
+            this.longClient = longClient;
+        }
+
+        static CallStats empty() {
+            return new CallStats(null, null, null, null, 0L, false);
+        }
+    }
+
+    /**
      * Validate every {@link MethodTraceLogMcpProperties.HostInfo} at startup.
      * <p>
      * Each host must have a non-blank {@code name}, a parseable {@code URL} whose scheme is
      * {@code http} or {@code https}, and the {@code name} must be unique across the list. Boot
-     * fails with {@link IllegalStateException} on the first violation.
+     * fails with {@link IllegalStateException} on the first violation. (Round 15 / MCP-R-09)
+     * additionally logs a WARN for every host whose {@code url} starts with {@code http://}
+     * <em>and</em> whose {@code apiKey} is non-empty: sending a static API key in cleartext over
+     * the wire is almost always a misconfiguration.
      */
     @PostConstruct
     public void validateHosts() {
@@ -181,6 +285,11 @@ public class MethodTraceLogMcpService {
                 throw new IllegalStateException("Duplicate host name '" + h.getName() +
                         "' at method-trace-log.mcp.hosts[" + prev + "] and [" + i + "]; host names must be unique.");
             }
+            // MCP-R-09: cleartext API key warning.
+            if (scheme.equalsIgnoreCase("http") && notBlank(h.getApiKey())) {
+                log.warn("[mcp-config] host '{}' (url={}) is configured with a non-empty apiKey over HTTP (cleartext). " +
+                        "Use HTTPS or move apiKey to a secrets manager.", h.getName(), url);
+            }
         }
     }
 
@@ -200,11 +309,37 @@ public class MethodTraceLogMcpService {
         return sb.toString();
     }
 
+    /**
+     * Health probe. Tries {@code /actuator/health} first (the conventional Spring Boot Actuator
+     * endpoint, returns JSON like {@code {"status":"UP"}}). Falls back to
+     * {@code /methodTraceLog/view/callServices} as a smoke test for hosts that expose the
+     * methodTraceLog surface but not the bare {@code /actuator}. (Round 15 / MCP-R-13)
+     * <p>
+     * If both endpoints return a non-2xx, the result is a structured error message describing
+     * exactly which endpoints were tried — much clearer than the historical "404" on a host that
+     * just happens not to expose {@code /actuator}.
+     */
     @Tool(description = "健康检查：尝试访问主机的 actuator endpoints，验证网络与鉴权是否通畅")
     public String ping(@ToolParam(description = "主机名称（与配置中的 name 一致）") String hostName) {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
-        return safeGet(host.get(), "/actuator", ToolOp.FAST_RETRYABLE);
+
+        // 1) Try /actuator/health first.
+        String health = safeGet("ping", host.get(), "/actuator/health", ToolOp.FAST_RETRYABLE);
+        if (!health.contains("\"error\":") && !health.contains("NOT_FOUND")) {
+            return health;
+        }
+
+        // 2) Fall back to /methodTraceLog/view/callServices.
+        String cs = safeGet("ping", host.get(), "/methodTraceLog/view/callServices", ToolOp.FAST_RETRYABLE);
+        if (!cs.contains("\"error\":") && !cs.contains("NOT_FOUND")) {
+            return cs;
+        }
+
+        // 3) Both failed. Return a clear "host not exposing actuator" message.
+        return "{\"error\":\"HOST_NOT_EXPOSING_ACTUATOR\",\"host\":\"" + hostName + "\"," +
+                "\"tried\":[\"/actuator/health\",\"/methodTraceLog/view/callServices\"]," +
+                "\"hint\":\"enable management.endpoints.web.exposure.include=methodtrace,health on the host\"}";
     }
 
     // ===================== 日志服务（CallService）维度 =====================
@@ -213,7 +348,7 @@ public class MethodTraceLogMcpService {
     public String getCallServices(@ToolParam(description = "主机名称") String hostName) {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
-        return safeGet(host.get(), "/methodTraceLog/view/callServices", ToolOp.FAST_RETRYABLE);
+        return safeGet("getCallServices", host.get(), "/methodTraceLog/view/callServices", ToolOp.FAST_RETRYABLE);
     }
 
     @Tool(description = "启用或停用指定的日志服务（控制是否输出方法追踪日志）")
@@ -223,7 +358,7 @@ public class MethodTraceLogMcpService {
             @ToolParam(description = "true=启用；false=停用") boolean enable) {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
-        return safeGet(host.get(),
+        return safeGet("setCallServiceEnable", host.get(),
                 "/methodTraceLog/view/callService?name=" + urlEncode(serviceName) + "&enable=" + enable,
                 ToolOp.FAST_NON_RETRYABLE);
     }
@@ -239,6 +374,11 @@ public class MethodTraceLogMcpService {
             @ToolParam(description = "可选：最多返回多少条，默认 200，最大 2000", required = false) Integer limit) {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
+        // MCP-R-16: don't emit a trailing "?" when no filters are set.
+        boolean anyFilter = className != null || methodName != null || onlyErrors != null || limit != null;
+        if (!anyFilter) {
+            return safeGet("getMethodTraceList", host.get(), "/methodTraceLog/view/list", ToolOp.FAST_RETRYABLE);
+        }
         // 用 boolean[] 绕开 lambda 内的 effectively-final 限制
         boolean[] first = {true};
         StringBuilder sb = new StringBuilder("/methodTraceLog/view/list?");
@@ -246,7 +386,7 @@ public class MethodTraceLogMcpService {
         if (methodName != null) appendQuery(sb, first, "methodName", methodName);
         if (onlyErrors != null) appendQuery(sb, first, "onlyErrors", onlyErrors.toString());
         if (limit != null) appendQuery(sb, first, "limit", String.valueOf(Math.max(1, Math.min(2000, limit))));
-        return safeGet(host.get(), sb.toString(), ToolOp.FAST_RETRYABLE);
+        return safeGet("getMethodTraceList", host.get(), sb.toString(), ToolOp.FAST_RETRYABLE);
     }
 
     /**
@@ -264,7 +404,13 @@ public class MethodTraceLogMcpService {
             @ToolParam(description = "追踪 ID（来自一次方法调用的根节点）") String traceId) {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
-        return safeGet(host.get(),
+        // MCP-R-17: validate traceId before forwarding.
+        if (traceId == null || !TRACE_ID_PATTERN.matcher(traceId).matches()) {
+            return "{\"error\":\"INVALID_TRACE_ID\",\"traceIdLength\":" +
+                    (traceId == null ? 0 : traceId.length()) +
+                    ",\"hint\":\"traceId must match " + TRACE_ID_PATTERN.pattern() + "\"}";
+        }
+        return safeGet("getMethodTraceByTraceId", host.get(),
                 "/methodTraceLog/view/traceid?id=" + urlEncode(traceId),
                 ToolOp.FAST_RETRYABLE);
     }
@@ -278,7 +424,7 @@ public class MethodTraceLogMcpService {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
         int n = limit == null ? 50 : Math.max(1, Math.min(500, limit));
-        return safeGet(host.get(), "/methodTraceLog/view/alerts?limit=" + n, ToolOp.FAST_RETRYABLE);
+        return safeGet("getAlerts", host.get(), "/methodTraceLog/view/alerts?limit=" + n, ToolOp.FAST_RETRYABLE);
     }
 
     @Tool(description = "获取主机上调用最慢的方法 Top-N（基于 Micrometer Timer 直方图，包含 p50/p95/p99/max）。")
@@ -290,7 +436,7 @@ public class MethodTraceLogMcpService {
         if (host.isEmpty()) return "主机不存在";
         int w = windowMinutes == null ? 5 : Math.max(1, Math.min(60, windowMinutes));
         int n = topN == null ? 10 : Math.max(1, Math.min(100, topN));
-        return safeGet(host.get(),
+        return safeGet("getSlowMethods", host.get(),
                 "/methodTraceLog/view/slowMethods?windowMinutes=" + w + "&topN=" + n,
                 ToolOp.FAST_RETRYABLE);
     }
@@ -309,7 +455,7 @@ public class MethodTraceLogMcpService {
                 .append(urlEncode(className)).append("&methodName=").append(urlEncode(methodName));
         if (timeoutSeconds != null) path.append("&timeoutSeconds=").append(timeoutSeconds);
         // Not in the retry list (per Round-14 risk inventory: idempotent GETs only).
-        return safeGet(host.get(), path.toString(), ToolOp.LONG_NON_RETRYABLE);
+        return safeGet("decompileMethod", host.get(), path.toString(), ToolOp.LONG_NON_RETRYABLE);
     }
 
     // ===================== 日志文件维度 =====================
@@ -318,7 +464,7 @@ public class MethodTraceLogMcpService {
     public String getLogFiles(@ToolParam(description = "主机名称") String hostName) {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
-        return safeGet(host.get(), "/methodTraceLog/logFile/files", ToolOp.FAST_RETRYABLE);
+        return safeGet("getLogFiles", host.get(), "/methodTraceLog/logFile/files", ToolOp.FAST_RETRYABLE);
     }
 
     @Tool(description = "在指定日志文件中按关键字与时间范围查询匹配行（最近若干行/从尾部起）")
@@ -333,6 +479,10 @@ public class MethodTraceLogMcpService {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
 
+        // MCP-R-18: body-size & time-format guards. Fail fast instead of round-tripping to the host.
+        String argErr = validateLogQueryArgs(fileName, keyword, startTime, endTime);
+        if (argErr != null) return argErr;
+
         // POST /methodTraceLog/logFile/query with JSON body
         Map<String, Object> body = new java.util.HashMap<>();
         body.put("fileName", fileName);
@@ -342,7 +492,7 @@ public class MethodTraceLogMcpService {
         if (maxLines != null) body.put("maxLines", maxLines);
         if (level != null) body.put("level", level);
 
-        return safePost(host.get(), "/methodTraceLog/logFile/query", body, ToolOp.LONG_NON_RETRYABLE);
+        return safePost("queryLogContent", host.get(), "/methodTraceLog/logFile/query", body, ToolOp.LONG_NON_RETRYABLE);
     }
 
     @Tool(description = "下载（返回文本）指定日志文件的全部内容或匹配段")
@@ -357,6 +507,10 @@ public class MethodTraceLogMcpService {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
 
+        // MCP-R-18: same guards as queryLogContent.
+        String argErr = validateLogQueryArgs(fileName, keyword, startTime, endTime);
+        if (argErr != null) return argErr;
+
         Map<String, Object> body = new java.util.HashMap<>();
         body.put("fileName", fileName);
         if (keyword != null) body.put("keyword", keyword);
@@ -365,7 +519,36 @@ public class MethodTraceLogMcpService {
         if (level != null) body.put("level", level);
         if (maxLines != null) body.put("maxLines", maxLines);
 
-        return safePost(host.get(), "/methodTraceLog/logFile/download", body, ToolOp.LONG_NON_RETRYABLE);
+        return safePost("downloadLog", host.get(), "/methodTraceLog/logFile/download", body, ToolOp.LONG_NON_RETRYABLE);
+    }
+
+    /**
+     * Centralised validation for the log-query POST tools (Round 15 / MCP-R-18).
+     *
+     * @return {@code null} on success; an error-JSON string the caller should return verbatim
+     *         when any input fails the cap or the ISO 8601 format.
+     */
+    static String validateLogQueryArgs(String fileName, String keyword, String startTime, String endTime) {
+        if (fileName == null || fileName.isBlank()) {
+            return "{\"error\":\"INVALID_FILE_NAME\",\"hint\":\"fileName must not be blank\"}";
+        }
+        if (fileName.length() > MAX_FILENAME_LENGTH) {
+            return "{\"error\":\"FILE_NAME_TOO_LONG\",\"length\":" + fileName.length() +
+                    ",\"max\":" + MAX_FILENAME_LENGTH + "}";
+        }
+        if (keyword != null && keyword.length() > MAX_KEYWORD_LENGTH) {
+            return "{\"error\":\"KEYWORD_TOO_LONG\",\"length\":" + keyword.length() +
+                    ",\"max\":" + MAX_KEYWORD_LENGTH + "}";
+        }
+        if (startTime != null && !ISO_8601_PATTERN.matcher(startTime).matches()) {
+            return "{\"error\":\"INVALID_TIME_FORMAT\",\"field\":\"startTime\",\"value\":\"" +
+                    startTime + "\"}";
+        }
+        if (endTime != null && !ISO_8601_PATTERN.matcher(endTime).matches()) {
+            return "{\"error\":\"INVALID_TIME_FORMAT\",\"field\":\"endTime\",\"value\":\"" +
+                    endTime + "\"}";
+        }
+        return null;
     }
 
     // ===================== 实时监控维度 =====================
@@ -376,7 +559,15 @@ public class MethodTraceLogMcpService {
             @ToolParam(description = "要监控的日志文件名") String fileName) {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
-        return safeGet(host.get(),
+        // MCP-R-18: clamp fileName.
+        if (fileName == null || fileName.isBlank()) {
+            return "{\"error\":\"INVALID_FILE_NAME\",\"hint\":\"fileName must not be blank\"}";
+        }
+        if (fileName.length() > MAX_FILENAME_LENGTH) {
+            return "{\"error\":\"FILE_NAME_TOO_LONG\",\"length\":" + fileName.length() +
+                    ",\"max\":" + MAX_FILENAME_LENGTH + "}";
+        }
+        return safeGet("startMonitor", host.get(),
                 "/methodTraceLog/logFile/monitor/start?fileName=" + urlEncode(fileName),
                 ToolOp.FAST_NON_RETRYABLE);
     }
@@ -387,7 +578,14 @@ public class MethodTraceLogMcpService {
             @ToolParam(description = "要停止监控的日志文件名") String fileName) {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
-        return safeGet(host.get(),
+        if (fileName == null || fileName.isBlank()) {
+            return "{\"error\":\"INVALID_FILE_NAME\",\"hint\":\"fileName must not be blank\"}";
+        }
+        if (fileName.length() > MAX_FILENAME_LENGTH) {
+            return "{\"error\":\"FILE_NAME_TOO_LONG\",\"length\":" + fileName.length() +
+                    ",\"max\":" + MAX_FILENAME_LENGTH + "}";
+        }
+        return safeGet("stopMonitor", host.get(),
                 "/methodTraceLog/logFile/monitor/stop?fileName=" + urlEncode(fileName),
                 ToolOp.FAST_NON_RETRYABLE);
     }
@@ -396,7 +594,7 @@ public class MethodTraceLogMcpService {
     public String getMonitorStatus(@ToolParam(description = "主机名称") String hostName) {
         Optional<MethodTraceLogMcpProperties.HostInfo> host = findHost(hostName);
         if (host.isEmpty()) return "主机不存在";
-        return safeGet(host.get(), "/methodTraceLog/logFile/monitor/status", ToolOp.FAST_RETRYABLE);
+        return safeGet("getMonitorStatus", host.get(), "/methodTraceLog/logFile/monitor/status", ToolOp.FAST_RETRYABLE);
     }
 
     // ===================== 内部辅助 =====================
@@ -409,10 +607,11 @@ public class MethodTraceLogMcpService {
     }
 
     /**
-     * Wrap a GET call with retry, timeout selection, and structured error reporting.
+     * Wrap a GET call with retry, timeout selection, audit logging, and structured error reporting.
+     * (Round 15 / MCP-R-20) every invocation emits one structured audit line on {@code stderr}.
      */
-    private String safeGet(MethodTraceLogMcpProperties.HostInfo host, String path, ToolOp op) {
-        return doWithRetry(host, op, () -> {
+    private String safeGet(String tool, MethodTraceLogMcpProperties.HostInfo host, String path, ToolOp op) {
+        return doWithRetry(tool, host, path, op, () -> {
             RestClient client = op.longTimeout ? longClient : fastClient;
             return client.get()
                     .uri(host.getUrl() + path)
@@ -424,10 +623,10 @@ public class MethodTraceLogMcpService {
     }
 
     /**
-     * Wrap a POST call with retry, timeout selection, and structured error reporting.
+     * Wrap a POST call with retry, timeout selection, audit logging, and structured error reporting.
      */
-    private String safePost(MethodTraceLogMcpProperties.HostInfo host, String path, Object body, ToolOp op) {
-        return doWithRetry(host, op, () -> {
+    private String safePost(String tool, MethodTraceLogMcpProperties.HostInfo host, String path, Object body, ToolOp op) {
+        return doWithRetry(tool, host, path, op, () -> {
             RestClient client = op.longTimeout ? longClient : fastClient;
             return client.post()
                     .uri(host.getUrl() + path)
@@ -444,17 +643,24 @@ public class MethodTraceLogMcpService {
      * Run an HTTP action with retries on retryable operations. Catches
      * {@link RestClientException}, classifies the failure, and returns a structured JSON
      * error string on final failure so the MCP transport does not propagate stack traces
-     * to the LLM.
+     * to the LLM. Also emits one structured audit log line on every call (success or failure).
      */
-    private String doWithRetry(MethodTraceLogMcpProperties.HostInfo host,
+    private String doWithRetry(String tool,
+                                MethodTraceLogMcpProperties.HostInfo host,
+                                String path,
                                 ToolOp op,
                                 java.util.function.Supplier<String> action) {
+        long start = System.currentTimeMillis();
         int maxAttempts = op.retryable ? RETRYABLE_TOTAL_ATTEMPTS : 1;
         long backoffMs = RETRY_BACKOFF_INITIAL_MS;
         RestClientException last = null;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                return action.get();
+                String result = action.get();
+                long dur = System.currentTimeMillis() - start;
+                lastCall = new CallStats(tool, host == null ? "" : host.getName(), path, "OK", dur, op.longTimeout);
+                writeAudit(tool, host, path, "OK", dur);
+                return result;
             } catch (RestClientException e) {
                 last = e;
                 log.warn("[mcp-rest] host={} op={} attempt={}/{} failed: {}",
@@ -470,7 +676,34 @@ public class MethodTraceLogMcpService {
                 }
             }
         }
+        String code = classifyErrorCode(last);
+        long dur = System.currentTimeMillis() - start;
+        lastCall = new CallStats(tool, host == null ? "" : host.getName(), path, code, dur, op.longTimeout);
+        writeAudit(tool, host, path, code, dur);
         return toErrorJson(host, last);
+    }
+
+    /**
+     * Single-source-of-truth for the audit log line. Logback's {@code ConsoleAppender} for
+     * {@code mcp.audit} routes to {@code System.err} only — see {@code logback-spring.xml}.
+     */
+    private static void writeAudit(String tool, MethodTraceLogMcpProperties.HostInfo host, String path, String status, long durationMs) {
+        auditLog.info("tool={} host={} path={} status={} duration={}ms",
+                nullSafe(tool),
+                host == null ? "" : nullSafe(host.getName()),
+                nullSafe(path),
+                nullSafe(status),
+                durationMs);
+    }
+
+    /** Visible for tests. Was the most recent safeGet / safePost routed through the long client? */
+    public boolean wasLastCallLongClient() {
+        return lastCall.longClient;
+    }
+
+    /** Visible for tests. Stats for the most recent safeGet / safePost. */
+    public CallStats getLastCallStats() {
+        return lastCall;
     }
 
     /**

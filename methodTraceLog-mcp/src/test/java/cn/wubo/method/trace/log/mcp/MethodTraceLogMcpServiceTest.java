@@ -230,10 +230,14 @@ class MethodTraceLogMcpServiceTest {
     }
 
     @Test
-    void ping_hits_actuator_endpoint() {
+    void ping_hits_actuator_health_endpoint() {
+        // Round 15 (MCP-R-13): ping now tries /actuator/health first (instead of bare /actuator,
+        // which only works on hosts that have configured the actuator base path). With the test
+        // server returning 200 for both, the first hit succeeds and the call returns "ok".
         MethodTraceLogMcpService svc = newService("local-dev", "");
-        svc.ping("local-dev");
-        assertEquals("/actuator", lastPath.get());
+        String result = svc.ping("local-dev");
+        assertEquals("ok", result);
+        assertEquals("/actuator/health", lastPath.get());
         assertEquals("GET", lastMethod.get());
     }
 
@@ -441,7 +445,11 @@ class MethodTraceLogMcpServiceTest {
             requestCount.set(0);
             MethodTraceLogMcpProperties.HostInfo h = hostInfo(
                     "local-dev", "http://127.0.0.1:" + s.getAddress().getPort(), "");
-            MethodTraceLogMcpService svc = new MethodTraceLogMcpService(List.of(h), RestClient.create());
+            // Use a JDK-backed RestClient so request counts are deterministic.
+            // (RestClient.create() picks up Apache HttpClient 5 if it's on the classpath, and the
+            //  default retry strategy would mask our service-level retry counts.)
+            MethodTraceLogMcpService svc = new MethodTraceLogMcpService(List.of(h),
+                    RestClient.builder().requestFactory(new JdkClientHttpRequestFactory()).build());
             long start = System.nanoTime();
             svc.getAlerts("local-dev", 10);
             long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
