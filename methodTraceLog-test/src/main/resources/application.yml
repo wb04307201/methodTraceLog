@@ -1,6 +1,10 @@
 method-trace-log:
   log:
     enable: true          # 是否启用方法追踪，默认true
+    exclude-patterns:    # 方法名黑名单（精确匹配，大小写不敏感）；命中后 LogAspect 短路直接 proceed()，不发出任何 BEFORE / AFTER_* 事件
+      - equals
+      - hashCode
+      - toString
     serviceCalls: # 启动时便开启的日志服务，默认无需配置全部开启，生产环境可以配置全部关闭，在需要时可通过web界面开启
       - name: CustomLog  # 日志输出服务
         enable: false
