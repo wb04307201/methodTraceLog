@@ -477,3 +477,37 @@
 
 - Same-JVM cross-thread propagation not tested (no specific scenario where this matters in current code).
 - Panel UI may want a visual distinction between "true root" (pspanid null) and "cross-instance inbound" (pspanid set to upstream) — tracked as panel polish item.
+
+---
+
+## Round 10 — Enable OTel in Test Environment (2026-08-29)
+
+**Goal:** `OtelPropagationIT` body actually executes end-to-end (no longer skips).
+
+**Background:** `OtelAutoConfig` deliberately does NOT call `GlobalOpenTelemetry.set()` (javadoc at `OtelAutoConfig.java:26-30` documents this — avoids conflict with Spring Boot's auto-configured OTel). The previous `OtelPropagationIT` skipped its body because `GlobalOpenTelemetry.get()` returned the no-op default. Round 10 changes ONLY the test environment — the test injects the SDK bean into `GlobalOpenTelemetry` itself.
+
+### Changes
+
+- `methodTraceLog-test/src/main/java/cn/wubo/method/trace/log/e2e/MtlE2eHarness.java`
+  - Added `public ConfigurableApplicationContext context()` getter (existing API untouched).
+
+- `methodTraceLog-test/src/test/java/cn/wubo/method/trace/log/e2e/OtelPropagationIT.java`
+  - Primary harness now boots with `extraProps = Map.of("method-trace-log.otel.enable", "true")` so `OtelAutoConfig` registers its SDK bean.
+  - `@BeforeAll` retrieves the `OpenTelemetry` SDK bean via `primary.context()` and installs it into `GlobalOpenTelemetry`.
+  - Test body runs inside an active span scope started from the SDK's `Tracer`, so `Span.current().getSpanContext().isValid()` returns true and the cross-JVM traceid assertion makes sense.
+  - `@AfterAll` calls `GlobalOpenTelemetry.resetForTest()` to clear the static field for subsequent test classes.
+  - Skip predicate moved to a defensive `otelSdk != null` check (only triggers if OTel SDK jar is missing from classpath).
+
+### Verification
+
+- Full suite: **214 tests, 0 failures, 0 errors, 0 skipped** (was 1 OTel skip before Round 10).
+- `OtelPropagationIT`: body executes end-to-end; cross-JVM traceid alignment verified.
+
+### Known limitations
+
+- The OTLP HTTP exporter will log connection-refused errors during the test (no OTLP collector running). Noisy-log concern only, not a correctness issue.
+- SDK is shared across the forked Surefire JVM via a static field; `resetForTest()` cleanup in `@AfterAll` is the safety net.
+
+### Substitution note
+
+`NoOpOpenTelemetry.getInstance()` was removed in OTel Java API 1.40+ in favor of `DefaultOpenTelemetry.getNoop()` (package-private). Used `GlobalOpenTelemetry.resetForTest()` instead — the OTel-official test-period reset entry point with equivalent semantics.
