@@ -198,13 +198,16 @@ class OtelPropagationIT {
         // PRODUCT GAP (Ruling 6): TraceContextFilter writes upstream parent-id to
         // MDC key 'pspanid', but LogAspect.around reads it from MDC key 'spanid' —
         // which the filter never sets. Result: primary's inbound root has pspanid==null.
-        // We assert it explicitly so a future fix that wires the keys correctly will
-        // turn this assertion into a failure and force a corresponding test update.
+        // Round 8 reverted the proposed fix because it broke SimpleMonitorServiceImpl's
+        // "pspanid==null means root" simplification (cross-instance inbound traces
+        // no longer appeared in /view/list). Full fix needs architectural changes —
+        // deferred to a future round; see Round 8 decision.
         ServiceCallInfo beforeOnPrimary = primaryInbound.get().getBefore();
         assertThat(beforeOnPrimary.getPspanid())
-                .as("KNOWN GAP from Task 3 review: primary inbound root has no upstream pspanid; "
-                        + "TraceContextFilter writes to MDC key 'pspanid' but LogAspect reads 'spanid'. "
-                        + "Cross-instance parent/child linking via pspanid is NOT wired end-to-end. "
+                .as("KNOWN GAP from Task 3 review (Ruling 6) + Round 8 deferral: "
+                        + "cross-instance parent/child linking via pspanid is NOT wired end-to-end. "
+                        + "LogAspect.java:162 reads prespanid from MDC key 'spanid'; "
+                        + "W3CTraceContextPropagator writes to MDC key 'pspanid'. "
                         + "Traceid propagation IS wired — see the assertThat above this one.")
                 .isNull();
     }

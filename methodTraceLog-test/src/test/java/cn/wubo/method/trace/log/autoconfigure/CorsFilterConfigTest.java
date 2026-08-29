@@ -9,9 +9,11 @@ import java.util.List;
 class CorsFilterConfigTest {
 
     @Test
-    void empty_origins_does_not_create_filter() {
+    void empty_origins_creates_noop_filter() {
+        // Round 8 rename: 实际行为是 filter 始终注册、allowedOrigins 为空时为 no-op
+        // （不再用 @ConditionalOnExpression —— Spring Boot 3.5 SpEL list-placeholder regression）。
+        // 这个测试只校验 CorsProperties 默认值（filter 实例由 Spring 容器在运行时管）。
         var props = new MethodTraceLogProperties.SecurityProperties.CorsProperties();
-        // 默认空 → 不应该有 filter
         Assertions.assertTrue(props.getAllowedOrigins().isEmpty());
         Assertions.assertEquals(0L, props.getMaxAge());
     }

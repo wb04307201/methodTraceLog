@@ -19,7 +19,7 @@ Maven multi-module project, Java 17. Run from the repo root.
 - Run all tests: `mvn test`
 - Run a single test class: `mvn -pl methodTraceLog-test test -Dtest=AbstractCallServiceTest`
 - Run a single test method: `mvn -pl methodTraceLog-test test -Dtest=AbstractCallServiceTest#transContext_withArray_shouldConvertToList`
-- Launch the sample app: `mvn -pl methodTraceLog-test spring-boot:run` (the test module does not declare `spring-boot-maven-plugin`; run via `java -cp ...` or by adding the plugin to the module).
+- Launch the sample app: `mvn -pl methodTraceLog-test spring-boot:run`. The test module declares `spring-boot-maven-plugin` (added in earlier rounds); `mvn package` produces an executable fat-jar at `methodTraceLog-test/target/methodTraceLog-test-1.0-SNAPSHOT.jar` that can be run with `java -jar`.
 - Launch the MCP server: `java -jar methodTraceLog-mcp/target/methodTraceLog-mcp-1.0-SNAPSHOT.jar` (talks over stdio).
 - The Maven `mvn` command on this machine must be invoked via `/c/developer/apache-maven-3.9.16/bin/mvn` (the default `mvn` shim is broken).
 
@@ -165,7 +165,7 @@ All tool parameters are declared with `@ToolParam(description = ...)` and the pa
   - `SlowMethodAnalyzer` — unconditional; pure read of the Micrometer registry.
   - `MtlShutdownHook` (nested in `LogConfig`) — registers a JVM shutdown hook that calls `ConfigurableApplicationContext.close()`. Belt-and-braces for Windows where `Ctrl+C` does not always reach the JVM.
   - `LogFileRealTimeService.close()` is `public` and annotated `@PreDestroy` so the `WatchService` + `ScheduledExecutorService` are released on every Spring teardown path.
-  - `CorsFilterConfig` — registers a `FilterRegistrationBean<CorsFilter>` only when `cors.allowed-origins` is non-empty.
+  - `CorsFilterConfig` — returns a `CorsFilter` directly (always registered). When `cors.allowed-origins` is non-empty, the filter applies the configured origins/methods/headers; when empty, it acts as a no-op (an empty `UrlBasedCorsConfigurationSource`).
   - `ErrorMessagePropertiesPostProcessor` — `EnvironmentPostProcessor` that sets `server.error.include-message=always` and `include-stacktrace=never` as defaults (respects explicit user values).
 
 - **New tests** (under `methodTraceLog-test/src/test/...`):
@@ -179,5 +179,5 @@ All tool parameters are declared with `@ToolParam(description = ...)` and the pa
 - **Open / blocked items** (still on the roadmap):
   - OTel tree topology via `ExtendedSpanBuilder.setSpanId(String)` — needs `opentelemetry-api-incubator` added as an optional compile dep; the brief's `SpanBuilder.setSpanId(byte[])` claim is false for OTel 1.49.0 (see round-5 report, `BLOCKED`). The actual public API is `io.opentelemetry.api.incubator.trace.ExtendedSpanBuilder.setSpanId(String)` in a separate JAR.
   - Windows `taskkill` without `/F` still skips JVM shutdown hooks (`CTRL_CLOSE_EVENT` not mapped). The `@PreDestroy` + JVM shutdown-hook combination is the most portable fix without dropping into `sun.misc.Signal`.
-  - `LogAspectExclusionTest` (`methodTraceLog-test/.../LogAspectExclusionTest.java`) has 2 pre-existing failures (`empty_patterns_no_exclusion`, `null_patterns_no_exclusion`) that pre-date this doc sync — the test asserts `Object.equals()` on a target that doesn't override `equals` flows through the proxy, which it does not. Out of scope for docs-only changes; track as a separate fix.
+  - `LogAspectExclusionTest` (`methodTraceLog-test/.../LogAspectExclusionTest.java`) passes 6/6 — the historical "2 pre-existing failures" claim from earlier CLAUDE.md syncs is stale (round 7 verified the test passes; Spring's CGLIB proxy correctly skips Object methods, so the test was redesigned to use Lombok-generated equals/toString stand-ins).
 
