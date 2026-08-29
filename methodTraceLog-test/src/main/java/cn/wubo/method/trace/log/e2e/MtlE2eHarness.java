@@ -62,6 +62,15 @@ public class MtlE2eHarness implements AutoCloseable {
     public TestRestTemplate http() { return http; }
     public int port() { return primaryPort; }
 
+    /**
+     * Exposes the underlying Spring {@link ConfigurableApplicationContext} so callers
+     * (notably {@code OtelPropagationIT}) can retrieve beans by type — e.g. to install
+     * the OTel SDK bean into {@link io.opentelemetry.api.GlobalOpenTelemetry}.
+     * Added in Round 10 to enable the OTel propagation integration test without
+     * touching starter code.
+     */
+    public ConfigurableApplicationContext context() { return primary; }
+
     public MethodTraceInfo awaitTrace(String traceId, Duration timeout) {
         long deadline = System.currentTimeMillis() + timeout.toMillis();
         while (System.currentTimeMillis() < deadline) {
