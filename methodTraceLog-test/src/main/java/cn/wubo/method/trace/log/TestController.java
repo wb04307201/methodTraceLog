@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestClient;
@@ -38,6 +39,14 @@ public class TestController {
 
     @Autowired
     private TestLombokEntity testLombokEntity2;
+
+    /**
+     * 自注入代理引用，用于 {@code /test/deep} 递归调用能继续走 Spring AOP 切面。
+     * 直接 {@code this.deep(depth-1)} 调用不走 CGLIB 代理，会绕过 LogAspect。
+     */
+    @Lazy
+    @Autowired
+    private TestController self;
 
     @Autowired
     public TestController(TestService testService, TestComponent testComponent,
@@ -235,5 +244,21 @@ public class TestController {
         traceContextCustomizer.customize(builder);
         RestClient client = builder.baseUrl("http://localhost:" + port).build();
         return client.get().uri("/test/aspectLog?name={n}", name).retrieve().body(String.class);
+    }
+
+    /**
+     * 递归构造 N 层嵌套调用链，用于验证深度 trace 树。
+     * 第 1 层直接返回；第 N 层先递归调用 (N-1) 层再返回。
+     * 默认 N=5。
+     */
+    @GetMapping("/deep")
+    public String deep(@RequestParam(value = "depth", defaultValue = "5") int depth) {
+        if (depth <= 1) {
+            return "deep:leaf:" + depth;
+        }
+        // 通过 testService 触发一次中间层 service 调用，使 trace 树至少有一层 service 节点
+        testService.add(depth, 1);
+        // 用 self（Spring 代理引用）递归，使每一层都走 LogAspect → 真正生成 N 个嵌套 span
+        return "deep:done:" + self.deep(depth - 1);
     }
 }

@@ -2,7 +2,6 @@ package cn.wubo.method.trace.log.e2e;
 
 import cn.wubo.method.trace.log.MethodTraceLogTestApplication;
 import cn.wubo.method.trace.log.impl.monitor.MethodTraceInfo;
-import org.springframework.boot.SpringApplication;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -37,13 +36,36 @@ public class MtlE2eHarness implements AutoCloseable {
     }
 
     public static MtlE2eHarness primary(int port, Map<String, Object> extraProps) {
+        return primary(port, extraProps, new Class<?>[0]);
+    }
+
+    /**
+     * 启动带额外 Spring 源的 harness。{@code additionalSources} 中的
+     * {@code @TestConfiguration} / {@code @Configuration} 类会被 Spring
+     * 注册到应用上下文，与 {@link MethodTraceLogTestApplication} 合并扫描。
+     * <p>
+     * 用于 OtelExportIT 这类需要把 InMemorySpanExporter 作为 {@code @Primary @Bean}
+     * 注入到 Spring 上下文的 IT —— 单纯 {@code @Primary} bean 替换 OtelAutoConfig
+     * 的 OpenTelemetry SDK bean，从而让 SimpleOtelServiceImpl 拿到带
+     * {@code SimpleSpanProcessor(InMemorySpanExporter)} 的 SDK。
+     */
+    public static MtlE2eHarness primary(int port, Map<String, Object> extraProps, Class<?>... additionalSources) {
         Map<String, Object> defaults = new HashMap<>();
         defaults.put("server.port", port);
         defaults.put("management.endpoints.web.exposure.include", "methodtrace,health,metrics");
         defaults.put("method-trace-log.security.api-key", API_KEY);
         defaults.put("logging.file.name", "logs/app-a.log");
         if (extraProps != null) defaults.putAll(extraProps);
-        ConfigurableApplicationContext ctx = SpringApplication.run(MethodTraceLogTestApplication.class, toArgs(defaults));
+        Class<?>[] sources;
+        if (additionalSources != null && additionalSources.length > 0) {
+            sources = new Class<?>[additionalSources.length + 1];
+            sources[0] = MethodTraceLogTestApplication.class;
+            System.arraycopy(additionalSources, 0, sources, 1, additionalSources.length);
+        } else {
+            sources = new Class<?>[]{MethodTraceLogTestApplication.class};
+        }
+        ConfigurableApplicationContext ctx = new org.springframework.boot.builder.SpringApplicationBuilder(sources)
+                .run(toArgs(defaults));
         return new MtlE2eHarness(ctx);
     }
 
