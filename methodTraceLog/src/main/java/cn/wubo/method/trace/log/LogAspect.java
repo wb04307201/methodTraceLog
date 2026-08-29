@@ -155,11 +155,18 @@ public class LogAspect {
         String preSampled = MDC.get(LOG_SAMPLED);
         String pspanid = null;
 
-        // 若无跟踪ID，则生成一个新的；否则获取当前跨度ID作为父跨度ID
+        // 若无跟踪ID，则生成一个新的；否则获取当前跨度ID作为父跨度ID。
+        // Round 9 修复：区分两种"继承 trace"场景：
+        //   1. 进程内嵌套调用：上层 LogAspect 已设 LOG_TRACE_ID + LOG_SPAN_ID，prespanid 非 null
+        //      → pspanid = prespanid（外层 spanid）
+        //   2. 跨实例 inbound：W3CTraceContextPropagator 只设了 LOG_TRACE_ID + LOG_PSAN_ID（来自
+        //      traceparent 的 parent-id），LOG_SPAN_ID 是 null（inbound 还没本地 span）
+        //      → pspanid = prepspanid（上游 parent spanid）
+        // 区分信号：prespanid != null → 进程内；prespanid == null → 跨实例。
         if (traceid == null) {
             traceid = UUID.randomUUID().toString();
         } else {
-            pspanid = prespanid;
+            pspanid = prespanid != null ? prespanid : prepspanid;
         }
         // 为当前方法调用生成新的唯一跨度ID
         String spanid = UUID.randomUUID().toString();

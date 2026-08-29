@@ -195,21 +195,17 @@ class OtelPropagationIT {
                 .as("primary should record inbound call with the same traceid propagated through W3C traceparent")
                 .isPresent();
 
-        // PRODUCT GAP (Ruling 6): TraceContextFilter writes upstream parent-id to
-        // MDC key 'pspanid', but LogAspect.around reads it from MDC key 'spanid' —
-        // which the filter never sets. Result: primary's inbound root has pspanid==null.
-        // Round 8 reverted the proposed fix because it broke SimpleMonitorServiceImpl's
-        // "pspanid==null means root" simplification (cross-instance inbound traces
-        // no longer appeared in /view/list). Full fix needs architectural changes —
-        // deferred to a future round; see Round 8 decision.
+        // Round 9: LogAspect pspanid fix is wired. Cross-instance inbound now carries
+        // the upstream parent's span id (from traceparent header, written by
+        // W3CTraceContextPropagator to MDC.LOG_PSAN_ID). SimpleMonitorServiceImpl
+        // saves cross-instance traces as top-level entries (no in-process parent
+        // in methodTraceInfoMap), so /view/list returns them and getByTraceid works.
         ServiceCallInfo beforeOnPrimary = primaryInbound.get().getBefore();
         assertThat(beforeOnPrimary.getPspanid())
-                .as("KNOWN GAP from Task 3 review (Ruling 6) + Round 8 deferral: "
-                        + "cross-instance parent/child linking via pspanid is NOT wired end-to-end. "
-                        + "LogAspect.java:162 reads prespanid from MDC key 'spanid'; "
-                        + "W3CTraceContextPropagator writes to MDC key 'pspanid'. "
-                        + "Traceid propagation IS wired — see the assertThat above this one.")
-                .isNull();
+                .as("post-Round-9 fix: cross-instance pspanid should be wired from "
+                        + "MDC.LOG_PSAN_ID; if this fails, LogAspect.java:168 likely regressed "
+                        + "to prespanid-only reading")
+                .isNotNull();
     }
 
     /** 轮询 host 的根 trace 列表，直到出现一个根，其 BEFORE 事件的 methodName 等于 {@code methodName} 为止。 */

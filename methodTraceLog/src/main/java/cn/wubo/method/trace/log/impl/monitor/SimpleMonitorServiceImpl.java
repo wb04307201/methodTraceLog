@@ -74,14 +74,19 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
 
             MethodTraceInfo methodTraceInfo = MethodTraceInfo.create(serviceCallInfo);
             methodTraceInfoMap.put(serviceCallInfo.getSpanid(), methodTraceInfo);
-            if (serviceCallInfo.getPspanid() == null) {
-                // 根节点：先在 store 中占位（BEFORE 阶段，让列表立即可见）
-                traceStore.save(methodTraceInfo);
+            // Round 9: 改为"无 in-process parent"判断。
+            //   - pspanid == null（真根）→ parent 找不到 → save
+            //   - pspanid != null 但 parent 不在 methodTraceInfoMap（跨实例 inbound，
+            //     parent 在另一个 JVM 里）→ save as root
+            //   - pspanid != null 且 parent 在 map 里（进程内嵌套）→ 挂为子节点，不 save
+            MethodTraceInfo parent = serviceCallInfo.getPspanid() == null
+                    ? null
+                    : methodTraceInfoMap.get(serviceCallInfo.getPspanid());
+            if (parent != null) {
+                parent.addChild(methodTraceInfo);
             } else {
-                MethodTraceInfo parent = methodTraceInfoMap.get(serviceCallInfo.getPspanid());
-                if (parent != null) {
-                    parent.addChild(methodTraceInfo);
-                }
+                // 根节点（含跨实例 inbound）：先在 store 中占位（BEFORE 阶段，让列表立即可见）
+                traceStore.save(methodTraceInfo);
             }
         } else if (serviceCallInfo.getLogActionEnum() == LogActionEnum.AFTER_RETURN
                 || serviceCallInfo.getLogActionEnum() == LogActionEnum.AFTER_THROW) {
@@ -99,9 +104,18 @@ public class SimpleMonitorServiceImpl extends AbstractCallService {
             MethodTraceInfo methodTraceInfo = methodTraceInfoMap.remove(serviceCallInfo.getSpanid());
             if (methodTraceInfo != null) {
                 methodTraceInfo.end(serviceCallInfo);
-                // 根节点再次写入 store，让 store 看到 after 字段
-                if (methodTraceInfo.getBefore() != null && methodTraceInfo.getBefore().getPspanid() == null) {
-                    traceStore.save(methodTraceInfo);
+                // Round 9: 与 BEFORE 分支一致的"无 in-process parent"判断
+                //   - 真根 → save（让 store 看到 after 字段）
+                //   - 跨实例 inbound → save（同上）
+                //   - 进程内嵌套 → 不 save（children 不进 store，只挂在 parent 下）
+                // null-safe: ConcurrentHashMap.get(null) throws NPE
+                if (methodTraceInfo.getBefore() != null) {
+                    String pspanid = methodTraceInfo.getBefore().getPspanid();
+                    // null-safe: ConcurrentHashMap.get(null) throws NPE. 真根 (pspanid==null)
+                    // 和跨实例 inbound (pspanid 不在 in-memory map) 都 save; 进程内嵌套不 save.
+                    if (pspanid == null || methodTraceInfoMap.get(pspanid) == null) {
+                        traceStore.save(methodTraceInfo);
+                    }
                 }
             }
         }
