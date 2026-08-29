@@ -511,3 +511,44 @@
 ### Substitution note
 
 `NoOpOpenTelemetry.getInstance()` was removed in OTel Java API 1.40+ in favor of `DefaultOpenTelemetry.getNoop()` (package-private). Used `GlobalOpenTelemetry.resetForTest()` instead — the OTel-official test-period reset entry point with equivalent semantics.
+
+---
+
+## Round 11 — Deep-Coverage IT Additions (2026-08-29)
+
+**Goal:** Add 7 IT classes covering features the Round 7 IT set only touched shallowly.
+
+### New IT classes (11 new test methods)
+
+| IT | Verifies | Methods |
+|---|---|---|
+| `TracePropagationDepthIT` | 5+ level nested call chain via `/test/deep?depth=N`; single shared traceid across all levels | 2 |
+| `ConcurrentTraceIT` | Multi-threaded (10 parallel × 3 calls) trace isolation; sequential calls also get distinct traceids | 2 |
+| `MdcCleanupIT` | No MDC leak across sequential calls; MDC was set during execution | 2 |
+| `AlertingCooldownIT` | `cooldown-seconds=5` suppresses repeat alerts within the window | 1 |
+| `SamplingExclusionIT` | `sample-rate=0.0` drops every call; `sample-rate=1.0` captures all | 2 |
+| `OtelExportIT` | `InMemorySpanExporter` captures `SimpleOtelServiceImpl` output | 1 |
+| `FileTraceStorePersistenceIT` | Traces persisted to disk survive harness restart via rebuildIndex | 1 |
+
+### New endpoint
+
+- `GET /test/deep?depth=N` (default 5) — recursive controller method calling itself N times, with a `testService.add` call per level to ensure both controller and service nodes appear in the trace tree. Uses `@Lazy @Autowired TestController self` for AOP-aware recursion (direct `this.deep()` would bypass the CGLIB proxy).
+
+### Test-environment additions
+
+- `MtlE2eHarness`: new `primary(int, Map, Class<?>...)` overload using `SpringApplicationBuilder` to register extra `@TestConfiguration` classes (needed by `OtelExportIT`).
+- `methodTraceLog-test/pom.xml`: added `opentelemetry-sdk-testing` (test scope) for `InMemorySpanExporter`.
+- `InMemoryOtelTestConfig`: `@TestConfiguration` providing a `@Primary OpenTelemetry` bean wired to `SimpleSpanProcessor(InMemorySpanExporter)`. The starter's `OtelAutoConfig` hardcodes `OtlpHttpSpanExporter`, so the override is needed to capture spans in-memory. Production behavior unchanged (this only applies when the test config is on the classpath).
+
+### Verification
+
+- Total tests after Round 11: **225 tests, 0 failures, 0 errors, 0 skipped** (BUILD SUCCESS).
+- All new IT classes pass individually via `mvn test -Dtest=<ClassName>`.
+- `OtelExportIT` did NOT skip (the `@Primary` SDK override worked as designed). `Assumptions.abort()` is defensive only.
+
+### Known limitations
+
+- `OtelExportIT` will log `WARN [OkHttpGrpcSender]` lines periodically because the production OtelAutoConfig still creates an OTLP SDK pointing at `127.0.0.1:1` (set explicitly to avoid the default endpoint). Cosmetic only.
+- `AlertingCooldownIT` runs on a separate port (8095) to avoid `AlertingIT`'s shared-state pollution.
+- `FileTraceStorePersistenceIT` uses `build/file-store-persistence-test/` for the file store path (gitignored).
+- `ServiceCallInfo.getArgs()` doesn't exist — args live in `getContext()`. `FileTraceStorePersistenceIT` uses `getContext()` for the trace arg check.
