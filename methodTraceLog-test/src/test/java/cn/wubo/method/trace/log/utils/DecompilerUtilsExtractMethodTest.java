@@ -134,4 +134,58 @@ class DecompilerUtilsExtractMethodTest {
         Assertions.assertTrue(m.isPresent(), "got: " + m.orElse("<empty>"));
         Assertions.assertFalse(m.get().contains("bar"), "got: " + m.get());
     }
+
+    // === Fix Round 2: 嵌套泛型签名（CFR 病态输出会长成 Map<String, List<Map<String, Integer>>） ===
+
+    @Test
+    void nested_generic_returnType_isMatched() {
+        // 短写在一行 — 验证现有正则能命中 1 层 <> + 1 层内部 <...>
+        String src = "class A {\n" +
+                "  public java.util.Map<java.lang.String, java.util.List<java.util.Map<java.lang.String, java.lang.Integer>>> aggregate() { return null; }\n" +
+                "  void other() {}\n" +
+                "}\n";
+        Optional<String> m = DecompilerUtils.extractMethod(src, "aggregate");
+        Assertions.assertTrue(m.isPresent(), "should match nested-generic return type; got empty. src=" + src);
+        Assertions.assertTrue(m.get().contains("aggregate()"),
+                "extracted should contain method name; got: " + m.get());
+        Assertions.assertFalse(m.get().contains("other"),
+                "extracted must not swallow next method; got: " + m.get());
+    }
+
+    @Test
+    void deeplyNested_generic_returnType_acrossMultipleLines_isMatched() {
+        // CFR 长泛型签名经常换行 —— 把类型拆成多行，验证正则仍能命中
+        String src = "class A {\n" +
+                "  public java.util.Map<java.lang.String,\n" +
+                "          java.util.List<java.util.Map<java.lang.String, java.lang.Integer>>>\n" +
+                "      aggregate() { return null; }\n" +
+                "  void other() {}\n" +
+                "}\n";
+        Optional<String> m = DecompilerUtils.extractMethod(src, "aggregate");
+        Assertions.assertTrue(m.isPresent(),
+                "multi-line nested generic signature should still match; got empty. src=" + src);
+        Assertions.assertTrue(m.get().contains("aggregate()"),
+                "got: " + m.get());
+        Assertions.assertFalse(m.get().contains("other"),
+                "got: " + m.get());
+    }
+
+    @Test
+    void nested_generic_signature_hasBalancedBraces() {
+        // 抽出后大括号必须配平 —— 这是 extractMethod 的硬约束
+        String src = "class A {\n" +
+                "  public java.util.Map<java.lang.String, java.util.List<java.util.Map<java.lang.String, java.lang.Integer>>> aggregate() {\n" +
+                "    if (true) { return null; }\n" +
+                "    return new java.util.HashMap<>();\n" +
+                "  }\n" +
+                "  void other() {}\n" +
+                "}\n";
+        Optional<String> m = DecompilerUtils.extractMethod(src, "aggregate");
+        Assertions.assertTrue(m.isPresent(), "should extract nested-generic method");
+        String body = m.get();
+        Assertions.assertEquals(
+                body.chars().filter(c -> c == '{').count(),
+                body.chars().filter(c -> c == '}').count(),
+                "braces must be balanced; got: " + body);
+    }
 }
