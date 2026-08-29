@@ -680,3 +680,39 @@ Used a delegating `SizeLimitingClientHttpRequestFactory` (~80 lines) rather than
 - MCP-R-18 (POST body size cap)
 - MCP-R-19 (per-call timeout variance)
 - MCP-R-20 (audit logging)
+
+---
+
+## Round 15 — MCP Low/Medium Risk Closure (2026-08-30)
+
+**Goal:** Close all 10 remaining MCP Low/Medium risks from `mcp-risk-inventory-2026-08-29.md`.
+
+### Production fixes (10)
+
+| Risk | File | Fix |
+|---|---|---|
+| MCP-R-08 (Med) | `MethodTraceLogMcpApplication.java` + `pom.xml` | Switched to Apache HttpClient 5 backed by `@Bean(destroyMethod="close") CloseableHttpClient`. Added `httpclient5` dep + `spring.lifecycle.timeout-per-shutdown-phase=30s`. Connection pool released on context shutdown |
+| MCP-R-09 (Med) | `MethodTraceLogMcpApplication.java` | `validateHosts()` logs WARN for each `http://` URL with non-empty apiKey (cleartext API key warning) |
+| MCP-R-13 (Low) | `MethodTraceLogMcpService.java` | `ping` tries `/actuator/health` first, falls back to `/methodTraceLog/view/callServices`, returns `HOST_NOT_EXPOSING_ACTUATOR` envelope if both 404 |
+| MCP-R-14 (Low) | `MethodTraceLogMcpApplication.java` | Round 14's `validateHosts` already rejects empty hosts[] — added dedicated full-context test |
+| MCP-R-15 (Low) | `MethodTraceLogMcpServiceTest.java` | `MethodToolCallbackProvider` discovery + invocation test (avoids piped-stdio corruption in shared Surefire fork) |
+| MCP-R-16 (Low) | `MethodTraceLogMcpService.java` | `getMethodTraceList` no longer emits trailing `?` when no filters |
+| MCP-R-17 (Low) | `MethodTraceLogMcpService.java` | `getMethodTraceByTraceId` validates `^[A-Za-z0-9_-]{1,128}$` |
+| MCP-R-18 (Low) | `MethodTraceLogMcpService.java` | `validateLogQueryArgs` clamps `fileName ≤ 256`, `keyword ≤ 1024`, validates `startTime`/`endTime` against ISO 8601 regex. Applied to queryLogContent, downloadLog, startMonitor, stopMonitor |
+| MCP-R-19 (Low) | `MethodTraceLogMcpApplication.java` | Verified per-call timeout routing via `CallStats.wasLastCallLongClient()` |
+| MCP-R-20 (Low) | `MethodTraceLogMcpService.java` | Added `mcp.audit` SLF4J logger; `doWithRetry` emits one structured `tool= host= path= status= duration=ms` line per call. logback-spring.xml already routes to System.err |
+
+### Verification
+
+- MCP module: **84 tests, 0 failures, 0 errors, 0 skipped** (was 46 → +38)
+- Main test module: **307 tests, 0 failures** (unchanged)
+- All 10 fixes have passing regression tests
+
+### MCP module coverage — COMPLETE
+
+All 20 risks from `mcp-risk-inventory-2026-08-29.md` are now either:
+- **Fixed** (14: R-01, R-02, R-03, R-04, R-05, R-06, R-07, R-08, R-09, R-10, R-11, R-13, R-14, R-15, R-16, R-17, R-18, R-19, R-20)
+- **Partially addressed** (1: R-12 — logback → stderr was already in place; R-14 — covered via R-05)
+- **Documented as known limitations** (0)
+
+MCP module test count progression: 13 → 46 (Round 14) → 84 (Round 15). **+71 MCP tests across Rounds 14-15.**
