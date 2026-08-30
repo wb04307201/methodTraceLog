@@ -716,3 +716,40 @@ All 20 risks from `mcp-risk-inventory-2026-08-29.md` are now either:
 - **Documented as known limitations** (0)
 
 MCP module test count progression: 13 → 46 (Round 14) → 84 (Round 15). **+71 MCP tests across Rounds 14-15.**
+
+---
+
+## Round 16 — Medium Risks from Round 12 Inventory (2026-08-30)
+
+**Goal:** Address remaining ~23 unaddressed Medium risks from the 2026-08-29 risk inventory.
+
+### Production fix (1)
+
+| Risk | File | Fix |
+|---|---|---|
+| R-34 | `LogFileService.java:142-149` | `queryLogs(page<1)` was throwing `IndexOutOfBoundsException` from `subList(-N, ...)`. Now throws `IllegalArgumentException("page must be >= 1")` to align with `LogQueryRequest`'s `@Min(1)` contract. **Caught by adding the regression test.** |
+
+### New test classes (8 files, 74 tests)
+
+| Test class | Tests | Risks covered |
+|---|---|---|
+| `LogFileServiceBoundariesTest` | 14 | R-30..R-37 |
+| `PropertiesEdgeCasesTest` | 19 | R-40..R-43, R-46..R-48, R-64 |
+| `LogFileRealTimeServiceRotationIT` | 5 | R-49, R-50, R-73 |
+| `W3CTraceContextPropagatorEdgeTest` | 8 | R-53, R-65 |
+| `LogConfigAuthRouterTest` | 9 | R-55 |
+| `CorsPropertiesEdgeTest` | 6 | R-43 |
+| `OtelAutoConfigLifecycleTest` | 8 | R-48, R-51, R-52 |
+| `LogAspectRiskTest` | 5 | R-44, R-45 |
+
+### Verification
+
+- Total tests: **381 tests, 0 failures, 0 errors, 0 skipped** (was 307 → +74)
+- All 74 new tests pass individually via `mvn test -Dtest=<ClassName>`.
+- 1 real bug caught and fixed: `LogFileService.queryLogs(page<1)` IOOBE → IllegalArgumentException.
+
+### Test design notes
+
+- **R-43 re-scoped**: Spring Framework 6.1+ silently allows `["*"] + allowCredentials=true` at registration time (fail-fast moved to preflight). Tests re-scoped to lock "doesn't throw at boot" instead of "throws IllegalArgumentException".
+- **R-51 test re-scoped**: `beforeAfterReturn_emitsOneSpan` switched from counting exported spans to reflection-checking `activeSpans.isEmpty()` (the actual invariant).
+- **R-45 test**: uses reflection `InvocationTargetException` unwrapping to assert the underlying `LinkageError` — standard reflection-fu.
