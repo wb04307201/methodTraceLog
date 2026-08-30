@@ -4,6 +4,9 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# SDD workspace (temporary files from subagent-driven-development)
+.superpowers/
+
 ### STS ###
 .apt_generated
 .classpath
