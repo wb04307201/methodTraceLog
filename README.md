@@ -40,7 +40,7 @@
 <dependency>
     <groupId>io.github.wb04307201</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.20</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
@@ -236,7 +236,7 @@ MCP server config (`mcpServers` JSON block) for AI clients like Claude Desktop, 
     "sql-forge-mcp": {
       "command": "jbang.cmd",
       "args": [
-        "io.github.wb04307201:methodTraceLog-mcp:1.0.20",
+        "io.github.wb04307201:methodTraceLog-mcp:1.1.0",
         "--method-trace-log.mcp.hosts[0].name=local-dev",
         "--method-trace-log.mcp.hosts[0].url=http://localhost:8080",
         "--method-trace-log.mcp.hosts[0].description=Local dev",
