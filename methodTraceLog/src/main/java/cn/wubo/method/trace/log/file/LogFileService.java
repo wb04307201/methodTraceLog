@@ -124,6 +124,17 @@ public class LogFileService {
     public LogQueryResponse queryLogs(LogQueryRequest request) throws IOException {
         String fileName = request.getFileName();
 
+        // 防御：page / pageSize 非法 → IllegalArgumentException（与 LogQueryRequest @Min(1) 的契约对齐）。
+        // 否则 startIndex = (page - 1) * pageSize 会变成负数，subList(-N, ...) 直接抛
+        // IndexOutOfBoundsException —— 用户看到的是底层 NPE / IOOBE，不是"分页参数非法"的清晰错误。
+        // 这一段必须在文件读取之前：fail-fast，避免无效请求付出 IO + 解析 + 过滤的全量代价。
+        if (request.getPage() < 1) {
+            throw new IllegalArgumentException("page must be >= 1, got: " + request.getPage());
+        }
+        if (request.getPageSize() < 1) {
+            throw new IllegalArgumentException("pageSize must be >= 1, got: " + request.getPageSize());
+        }
+
         File logFile = getFile(fileName);
 
         int maxScanLines = Math.max(properties.getScanLines(), 1000);
@@ -138,9 +149,8 @@ public class LogFileService {
         }
 
         int totalLines = filteredLines.size();
-        // 防御：page < 1 → IllegalArgumentException（与 LogQueryRequest @Min(1) 的契约对齐）。
-        // 否则 startIndex = (page - 1) * pageSize 会变成负数，subList(-N, ...) 直接抛
-        // IndexOutOfBoundsException —— 用户看到的是底层 NPE / IOOBE，不是"页码非法"的清晰错误。
+        // belt-and-braces：上面的早返回已经做了 page<1/pageSize<1 校验；这里保留同样校验
+        // 作为防御性深度防御 —— 即便校验被未来的重构挪走，下面算 startIndex 的逻辑仍然安全。
         if (request.getPage() < 1) {
             throw new IllegalArgumentException("page must be >= 1, got: " + request.getPage());
         }

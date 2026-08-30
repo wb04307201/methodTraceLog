@@ -186,6 +186,80 @@ class LogFileServiceBoundariesTest {
                 () -> svc.queryLogs(req));
     }
 
+    // ===== Round 18 fix: page/pageSize 校验在文件读取之前（fail-fast） =====
+
+    @Test
+    void queryLogs_pageZero_failsBeforeFileRead(@TempDir Path dir) {
+        // 验证：当 page=0 时，queryLogs 抛"page must be >= 1"，而不是先尝试去读一个不存在的文件。
+        // 用一个 pathInspection 能通过、但 getFile() 一定会拒绝的 fileName（不存在的文件 → "File does not exist"）。
+        // 若校验在文件读取之后，getFile 会先抛 "File does not exist"；本测试要求先抛 page 错误，证明校验已前置。
+        MethodTraceLogProperties.FileProperties fp = new MethodTraceLogProperties.FileProperties();
+        fp.setLogPath(dir.toString());
+        fp.setAllowedExtensions(Arrays.asList(".log"));
+        fp.setScanLines(1000);
+        LogFileService svc = new LogFileService(fp);
+
+        LogQueryRequest req = new LogQueryRequest();
+        req.setFileName("does-not-exist.log"); // getFile 会抛 "File does not exist"
+        req.setPage(0); // 应当先于此处抛出
+        req.setPageSize(100);
+
+        IllegalArgumentException ex = Assertions.assertThrows(IllegalArgumentException.class,
+                () -> svc.queryLogs(req),
+                "page=0 必须在任何文件 IO 之前抛 IllegalArgumentException");
+        Assertions.assertTrue(ex.getMessage().contains("page must be >= 1"),
+                "异常必须是 page 校验，不是文件读取错误；got: " + ex.getMessage());
+        Assertions.assertFalse(ex.getMessage().contains("File does not exist"),
+                "绝不应该走到 getFile；got: " + ex.getMessage());
+    }
+
+    @Test
+    void queryLogs_pageSizeZero_throwsIllegalArgumentException(@TempDir Path dir) throws IOException {
+        // pageSize=0 必须抛 IllegalArgumentException（与 LogQueryRequest @Min(1) 对齐）。
+        // 把校验移到文件读取之前：即使给个不存在的 fileName，也应先抛 pageSize 错误。
+        MethodTraceLogProperties.FileProperties fp = new MethodTraceLogProperties.FileProperties();
+        fp.setLogPath(dir.toString());
+        fp.setAllowedExtensions(Arrays.asList(".log"));
+        fp.setScanLines(1000);
+        LogFileService svc = new LogFileService(fp);
+
+        Path f = dir.resolve("app.log");
+        Files.writeString(f, "2024-01-01 10:00:00.000 [main] INFO  com.example.App - line A\n");
+
+        LogQueryRequest req = new LogQueryRequest();
+        req.setFileName("app.log");
+        req.setPage(1);
+        req.setPageSize(0);
+        IllegalArgumentException ex = Assertions.assertThrows(IllegalArgumentException.class,
+                () -> svc.queryLogs(req),
+                "pageSize=0 必须抛 IllegalArgumentException");
+        Assertions.assertTrue(ex.getMessage().contains("pageSize must be >= 1"),
+                "异常消息应清晰指出 pageSize 非法；got: " + ex.getMessage());
+    }
+
+    @Test
+    void queryLogs_negativePageSize_throwsIllegalArgumentException(@TempDir Path dir) throws IOException {
+        // 负数 pageSize 也必须抛 IllegalArgumentException（与 @Min(1) 对齐）。
+        MethodTraceLogProperties.FileProperties fp = new MethodTraceLogProperties.FileProperties();
+        fp.setLogPath(dir.toString());
+        fp.setAllowedExtensions(Arrays.asList(".log"));
+        fp.setScanLines(1000);
+        LogFileService svc = new LogFileService(fp);
+
+        Path f = dir.resolve("app.log");
+        Files.writeString(f, "2024-01-01 10:00:00.000 [main] INFO  com.example.App - line A\n");
+
+        LogQueryRequest req = new LogQueryRequest();
+        req.setFileName("app.log");
+        req.setPage(1);
+        req.setPageSize(-10);
+        IllegalArgumentException ex = Assertions.assertThrows(IllegalArgumentException.class,
+                () -> svc.queryLogs(req),
+                "pageSize<0 必须抛 IllegalArgumentException");
+        Assertions.assertTrue(ex.getMessage().contains("pageSize must be >= 1"),
+                "异常消息应清晰指出 pageSize 非法；got: " + ex.getMessage());
+    }
+
     // ===== R-35: reverse 默认值 =====
 
     @Test
