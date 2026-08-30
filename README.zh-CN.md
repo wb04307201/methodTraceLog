@@ -1,10 +1,12 @@
-# Method Trace Log - 方法观测日志
+# 方法脉迹 (Method Trace Log)
 
 <div align="right">
   <a href="README.md">English</a> | 中文
 </div>
 
 > Spring Boot 非侵入式 AOP 方法追踪、调用链与告警。附带独立 MCP server（`methodTraceLog-mcp`），通过 stdio 向 AI agent 暴露同等能力。
+
+*「脉」= 方法实时跳动的脉搏；「迹」= 调用路径留痕。方法脉迹 = 实时追踪方法调用链路与异常。*
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
