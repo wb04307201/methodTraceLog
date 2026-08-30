@@ -1,4 +1,4 @@
-# 方法脉迹 (Method Trace Log)
+# Method Trace Log - 方法脉迹
 
 <div align="right">
   <a href="README.md">English</a> | 中文
