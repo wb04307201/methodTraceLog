@@ -138,6 +138,12 @@ public class LogFileService {
         }
 
         int totalLines = filteredLines.size();
+        // 防御：page < 1 → IllegalArgumentException（与 LogQueryRequest @Min(1) 的契约对齐）。
+        // 否则 startIndex = (page - 1) * pageSize 会变成负数，subList(-N, ...) 直接抛
+        // IndexOutOfBoundsException —— 用户看到的是底层 NPE / IOOBE，不是"页码非法"的清晰错误。
+        if (request.getPage() < 1) {
+            throw new IllegalArgumentException("page must be >= 1, got: " + request.getPage());
+        }
         int totalPages = (int) Math.ceil((double) totalLines / request.getPageSize());
         int startIndex = (request.getPage() - 1) * request.getPageSize();
         int endIndex = Math.min(startIndex + request.getPageSize(), totalLines);
