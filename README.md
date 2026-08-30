@@ -4,7 +4,7 @@
   English | <a href="README.zh-CN.md">中文</a>
 </div>
 
-> Spring Boot starter for method tracing, performance monitoring, log file management, and CFR-backed decompilation. Includes a standalone MCP server (`methodTraceLog-mcp`) that exposes the same capabilities to AI agents over stdio.
+> Non-intrusive AOP method tracing + trace tree + alerting for Spring Boot. Includes a standalone MCP server (`methodTraceLog-mcp`) that exposes the same capabilities to AI agents over stdio.
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)

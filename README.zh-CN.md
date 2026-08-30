@@ -4,7 +4,7 @@
   <a href="README.md">English</a> | 中文
 </div>
 
-> Spring Boot starter，提供方法调用链路追踪、性能监控、日志文件管理、CFR 反编译。附带独立 MCP 服务（`methodTraceLog-mcp`），通过 stdio 把上述能力开放给 AI Agent。
+> Spring Boot 非侵入式 AOP 方法追踪、调用链与告警。附带独立 MCP server（`methodTraceLog-mcp`），通过 stdio 向 AI agent 暴露同等能力。
 
 [![](https://jitpack.io/v/com.gitee.wb04307201/methodTraceLog.svg)](https://jitpack.io/#com.gitee.wb04307201/methodTraceLog)
 [![star](https://gitee.com/wb04307201/methodTraceLog/badge/star.svg?theme=dark)](https://gitee.com/wb04307201/methodTraceLog)
