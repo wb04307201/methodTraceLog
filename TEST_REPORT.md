@@ -808,3 +808,23 @@ The 2026-08-29 risk inventory (92 risks) is now **fully closed**:
 - Low (30): all addressed
 
 Remaining risks noted in the inventory are either: documented design decisions (R-44 MultipartFile loses content), informational (R-67 LogActionEnum coverage), or absorbed into other fixes (R-77 sampling inheritance test).
+
+---
+
+## Round 18 — LogFileService Fail-Fast Fix (2026-08-30)
+
+**Source:** `/code-review` final review (Round 17 closure).
+
+**Production fix:** `LogFileService.queryLogs` moved its `page<1` runtime guard to the top of the method (before any file IO), and added a parallel `pageSize<1` guard. Invalid input now fails fast without paying the `Files.lines().limit(maxScanLines)` read+filter cost.
+
+The original post-read page guard is retained as belt-and-braces (per the `/code-review` "info" severity note that flagged the runtime-vs-bean-validation redundancy as defense-in-depth, not a bug).
+
+### New tests (3)
+
+- `LogFileServiceBoundariesTest.queryLogs_pageZero_failsBeforeFileRead` — asserts the thrown message is `"page must be >= 1"`, NOT `"File does not exist"`, proving validation runs before any `Files.lines` call
+- `LogFileServiceBoundariesTest.queryLogs_pageSizeZero_throwsIllegalArgumentException`
+- `LogFileServiceBoundariesTest.queryLogs_negativePageSize_throwsIllegalArgumentException` (was leaking `subList` IOOBE before)
+
+### Verification
+
+- Total: **475 tests, 0 failures, 0 errors, 0 skipped** (was 472 → +3)
