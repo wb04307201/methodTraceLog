@@ -130,25 +130,42 @@ method-trace-log:
 
 ### 更新日志
 
-上一次同步文档之后 `dev` 分支新增 47 个 commit 的关键改动（详见 `TEST_REPORT.md` §8）：
+Round 7–18 的关键改动（12 个 round、约 38 个 commit），上一次文档同步以来新增的内容——完整记录见 `TEST_REPORT.md` §Round 7 之后。
 
-- **CORS**（`ba3af83`）— `security.cors.allowed-origins` 启用后注册 `CorsFilter` 到 `/methodTraceLog/*`；空列表 = 不过滤（行为不变）。
-- **异常告警**（`77da2f8`、`9ab2347`、`ee5adfa`、`a427fa5`、`8999261`）— `AlertingService` 作为第 4 个内置 `ICallService`；滑动窗口阈值 + 冷却期，异步 webhook（3s 超时，daemon 线程池），最近事件 ring buffer 通过 `/view/alerts` 与 MCP `getAlerts` 暴露。
-- **慢方法 Top-N**（`ee5adfa`、`a427fa5`）— `SlowMethodAnalyzer` 从 Micrometer histogram 出 Top-N，通过 `/view/slowMethods` 与 MCP `getSlowMethods` 暴露。
-- **日志文件大小上限**（`4de58d3`、`faaa4a4`）— 默认 `file.max-file-size=100MB` + `file.total-size-cap=10GB`；logback 用 `SizeAndTimeBasedRollingPolicy` 落实。
-- **采样健壮性**（`d688441`）— `sample-rate` 启动时 clamp 到 `[0.0, 1.0]`，错误配置不再导致 context 启动失败。
-- **方法名黑名单** — `log.exclude-patterns`（如 `[equals, hashCode, toString, canEqual]`）在 `LogAspect` 通知最顶端短路——命中方法不分配 `traceid` / `spanid`，也不发出任何事件；`LogConfig.logAspect()` 注入（`methodTraceLog/src/main/java/cn/wubo/method/trace/log/LogAspect.java:91-95` 与 `:142-150`）；默认空。
-- **trace 存储容量生效**（`24808e2`、`14a19d8`）— `maxTraces` 真正生效；`rebuildIndex` 也会回填 recent list。
-- **反编译：找不到方法返回 404**（`daaf99f`）— 之前是 fallback 到整个类。
-- **日志监控支持多文件**（`45411a3`）— `LogFileRealTimeService` 可同时监控 N 个文件；`/logFile/monitor/status` 返回 `monitoredFiles: Set<String>` + `monitoredFilesCount`（旧的 `currentFile` 字段移除）。
-- **关闭清理**（`810f45f`）— `LogFileRealTimeService.close()` 加 `@PreDestroy` + 显式 JVM shutdown hook；`ClosedWatchServiceException` 优雅处理。
-- **4xx 响应体携带 message**（`7b77278`）— `server.error.include-message=always` 由 starter 默认设置；4xx 响应体带 `message` 字段。
-- **MCP logback → stderr**（`cc5dc2a`）— `methodTraceLog-mcp` 自带 `logback-spring.xml`，仅 `ConsoleAppender` 走 stderr，stdio 留给 JSON-RPC。
-- **ApiKeyFilter 直接单测**（`3871013`）— 8 个单元测试覆盖 X-Api-Key / cookie / 白名单 / OPTIONS / 关闭路径。
+- **覆盖率**（Round 7）— 14 个集成测试类（`TracePropagationIT`、`OtelPropagationIT`、`AlertingIT`、`SlowMethodIT`、`SamplingIT`、`ExcludePatternIT`、`TraceStoreIT`、`LogFileQueryIT`、`LogFileMonitorIT`、`DecompileIT`、`SessionAuthIT`、`CorsIT`、`PanelIT`、`McpIntegrationIT`）双路径验证（JUnit HTTP + Agent MCP）覆盖全部能力。`cn.wubo.method.trace.log.e2e.*` 包下新增 26 个 e2e + 11 个深度覆盖测试方法 = 37 个新测试。Round 11 又补了 7 个 IT 类（5 层以上嵌套调用、并发 trace 隔离、MDC 清理、cooldown 抑制、sample-rate 排除、内存 OTel 导出、文件存储持久化）。Round 7 期间同时发现并修复了 2 个真实 bug：`CorsFilterConfig` 自 Round 5 起就漏挂在 `AutoConfiguration.imports` 上（生产环境 CORS 一直是坏的）；`exclude-patterns` 代码里加了但测试 app 的 YAML 一直没写。
 
-路线图（尚未提交）：
+- **跨实例 `pspanid` 修复**（Round 8–9）— 协调两个文件的改动，解决 Round 7 抓到的 MDC 键名错位（Ruling 6）。`LogAspect` 改成 `pspanid = prespanid != null ? prespanid : prepspanid`：进程内嵌套调用用调用方 span id，跨实例入站调用用 W3C `traceparent` 头上游的 parent span id。`SimpleMonitorServiceImpl.save()` 把判定从 `pspanid == null` 换成 `methodTraceInfoMap.get(pspanid) == null`（空安全）——真正的根调用和跨实例入站都存为顶层条目；进程内的子节点只挂载不存。
 
-- OTel tree 拓扑通过 `ExtendedSpanBuilder.setSpanId(String)` — 需要把 `opentelemetry-api-incubator` 升级为 optional compile 依赖；当前 OTel 1.49.0 的 `SpanBuilder` 没有 `setSpanId(byte[])`。
+- **OTel 测试环境**（Round 10）— `OtelPropagationIT` body 现在真正端到端执行。测试 harness 启动 primary context 时把 `method-trace-log.otel.enable=true` 注入，并把 SDK bean 装进 `GlobalOpenTelemetry`，这样 `Span.current().getSpanContext().isValid()` 返回 true，跨 JVM traceid 断言才有意义。`@AfterAll` 用 `GlobalOpenTelemetry.resetForTest()` 清理。从 1 skip 变成 0 skip。
+
+- **风险驱动的测试**（Round 12、16–17）— 2026-08-29 风险清单上的 92 条风险系统性地全部关闭：Round 12 新增 14 个测试类 / 53 个方法（Top 风险），Round 16 新增 8 个类 / 74 个方法（中等），Round 17 新增 13 个类 / 97 个方法（低级）。覆盖边界、属性、并发竞争、淘汰竞争、生命周期 / 关闭路径、资源泄漏、边缘场景等。`cn.wubo.method.trace.log.sampler.SampledDecision` 删除（Round 17 R-66，grep 确认生产代码零引用）。
+
+- **`/code-review` 修复**（Round 13）— code-review 跑出来 9 个真实 bug 全部修复：
+  - `CorsFilterConfig` 注册的是 `/*` 而不是 `/methodTraceLog/*`，静默覆盖了用户为其他 URL 模式定义的过滤器。
+  - `ErrorMessagePropertiesPostProcessor` 用了 `addFirst` 加到 `PropertySources` 列表上，把 `application.yml` / 命令行上的用户值盖掉了；改成 `addLast`，starter 默认值优先级最低。
+  - `AlertingService` 的 cooldown 是 check-then-put，非原子，并发场景下会重复发 webhook；改用 `putIfAbsent(key, now)`。
+  - `DecompilerUtils.extractMethod` 正则不识别构造方法（没有返回类型组）；现在构造方法也能匹配。
+  - `/methodTraceLog/decompile` 在方法无法提取时（如构造方法）返回 404，而不是文档约定的整类源码 fallback；恢复原契约；外部消费者要拿 404 信号的就得自己适配。
+  - `SimpleMonitorServiceImpl` 跨线程竞争，导致父的 `BEFORE` 在子的 `BEFORE` 之后到达时会重复插入根；改成检测到父有 in-flight 子节点就跳过 save。
+  - `sample-rate` clamp 在 YAML 写 `NaN`/`Infinity` 时会抛；`Double.isFinite(rate) ? clamp : 1.0` 修复。
+  - 日志路径的 env-post-processor 在目录不可写时静默成功；改成 `Files.isWritable` 探测后抛 `IllegalArgumentException`（落实文档的 fail-fast）。
+  - `AlertingService` 之前用 `transContext(info.getContext())` 把原始 `Throwable` 丢掉了；改成 `info.getRawException()`，原始异常 + stack trace 都能保留。
+
+- **MCP 模块加固**（Round 14–15）— 18 个修复。亮点：
+  - **HTTP 超时**：3s 连接，普通调用 30s 读 / 长轮询 120s 读。先用 `JdkClientHttpRequestFactory`，后来切到 Apache HttpClient 5（`@Bean(destroyMethod="close") CloseableHttpClient`），保证 context 关闭时连接池能释放（`spring.lifecycle.timeout-per-shutdown-phase=30s`）。
+  - **16 MiB 响应大小上限**通过 `SizeLimitingClientHttpRequestFactory`（带 `Content-Length` 预检 + 流式 `BoundedInputStream` 字节计数）。Spring 6.2 的 `RestClient.Builder` 没有 `ExchangeStrategies.maxInMemorySize`，只能写一个委托 factory。
+  - **幂等 GET 重试** 指数退避（2 次重试，100–500ms），通过 `ToolOp` 枚举 + `doWithRetry`。
+  - **结构化错误 JSON** 通过 `safeGet`/`safePost` + `toErrorJson` + cause-chain walker —— 永不泄漏 stack trace。
+  - **多主机配置校验**：`@PostConstruct validateHosts()` 拒绝空 `hosts[]` / 重名 / 空字段 / 非 http(s) URL；cleartext `http://` + 非空 `api-key` 输出 WARN。
+  - **`ping` 韧性**：先试 `/actuator/health`，fallback 到 `/methodTraceLog/view/callServices`，都 404 时返回 `HOST_NOT_EXPOSING_ACTUATOR` 信封。
+  - **URL 编码修复**：`URLEncoder.encode(s, UTF_8).replace("+", "%20")` 走 RFC 3986。
+  - **参数校验**：`getMethodTraceByTraceId` 校验 `^[A-Za-z0-9_-]{1,128}$`；`validateLogQueryArgs` 把 `fileName ≤ 256`、`keyword ≤ 1024`、ISO 8601 起止时间都校验；应用到 `queryLogContent`、`downloadLog`、`startMonitor`、`stopMonitor`。
+  - **结构化审计日志**通过 `mcp.audit` SLF4J logger；`doWithRetry` 每调用输出一行 `tool= host= path= status= duration=ms`（`logback-spring.xml` 路由到 `System.err`，stdin 上的 JSON-RPC 保持干净）。
+  - **+71 个 MCP 测试**（13 → 46 → 84）。
+
+- **性能**（Round 18）— `LogFileService.queryLogs` 把 `page<1` 的运行时 guard 上移到方法顶部，赶在任何 `Files.lines().limit(maxScanLines)` 读+过滤之前；同步加了 `pageSize<1` guard。非法输入现在快速失败，不再付文件 IO 代价；原来的读后 page guard 保留作为兜底。
+
+**Round 18 收尾后的测试总数**：**565 个测试**（主模块 475 + MCP 模块 90），全绿，0 skip。
 
 
 ---

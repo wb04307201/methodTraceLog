@@ -130,24 +130,42 @@ method-trace-log:
 
 ### What's new
 
-Highlights from the rounds that landed on `dev` between the last doc sync and now (47 commits, see `TEST_REPORT.md` §8):
+Highlights from Rounds 7–18 (12 rounds, ~38 commits) since the last doc sync — see `TEST_REPORT.md` §Round 7 onward for the full record.
 
-- **CORS** (`ba3af83`) — `security.cors.allowed-origins` enables a `CorsFilter` registered against `/methodTraceLog/*`. Empty list = filter not registered (no behavior change).
-- **Exception alerting** (`77da2f8`, `9ab2347`, `ee5adfa`, `a427fa5`, `8999261`) — `AlertingService` is a 4th built-in `ICallService`. Sliding-window threshold + cooldown, async webhook (3s timeout, daemon pool), `ring buffer` of recent events exposed at `/view/alerts` and via MCP `getAlerts`.
-- **Slow methods** (`ee5adfa`, `a427fa5`) — `SlowMethodAnalyzer` reads the Micrometer histogram and returns top-N at `/view/slowMethods` and via MCP `getSlowMethods`.
-- **Log file size cap** (`4de58d3`, `faaa4a4`) — `file.max-file-size=100MB` + `file.total-size-cap=10GB` defaults; logback rolls with `SizeAndTimeBasedRollingPolicy` to honour them.
-- **Robust sampler** (`d688441`) — `sample-rate` is clamped to `[0.0, 1.0]` on startup; bad config no longer crashes the context.
-- **Method-name blacklist** — `log.exclude-patterns` (e.g. `[equals, hashCode, toString, canEqual]`) short-circuits matched methods at the very top of the `LogAspect` advice — no `traceid` / `spanid` is allocated, no event is emitted. Wired in `LogConfig.logAspect()` (`methodTraceLog/src/main/java/cn/wubo/method/trace/log/LogAspect.java:91-95`, `:142-150`); default empty.
-- **Trace store enforces cap** (`24808e2`, `14a19d8`) — `maxTraces` is now actually enforced for in-memory & file stores; `rebuildIndex` populates the recent list (not just the index map).
-- **Decompile: 404 when method is not in class** (`daaf99f`) — previously fell back to returning the whole class.
-- **Multi-file log monitor** (`45411a3`) — `LogFileRealTimeService` now monitors N files concurrently; `/logFile/monitor/status` returns `monitoredFiles: Set<String>` + `monitoredFilesCount` (the old `currentFile` field is gone — clean break).
-- **Shutdown cleanup** (`810f45f`) — `@PreDestroy` on `LogFileRealTimeService.close()` plus an explicit JVM shutdown hook; `ClosedWatchServiceException` is handled cleanly.
-- **ResponseStatusException body** (`7b77278`) — `server.error.include-message=always` is set as a starter default; 4xx responses now include the actual `message` field.
-- **MCP logback → stderr** (`cc5dc2a`) — `logback-spring.xml` in the MCP module routes the only `ConsoleAppender` to `System.err` so stdio stays clean for JSON-RPC.
-- **ApiKeyFilter direct tests** (`3871013`) — 8 unit tests cover X-Api-Key / cookie / whitelisted panel / OPTIONS / no-op paths.
+- **Coverage** (Round 7) — 14 integration test classes (`TracePropagationIT`, `OtelPropagationIT`, `AlertingIT`, `SlowMethodIT`, `SamplingIT`, `ExcludePatternIT`, `TraceStoreIT`, `LogFileQueryIT`, `LogFileMonitorIT`, `DecompileIT`, `SessionAuthIT`, `CorsIT`, `PanelIT`, `McpIntegrationIT`) cover every feature end-to-end via dual-path verification (JUnit HTTP + Agent MCP). 26 e2e + 11 deep-coverage test methods = 37 new tests in `cn.wubo.method.trace.log.e2e.*`. Round 11 added 7 more IT classes for deep paths (5+ level nested calls, concurrent trace isolation, MDC cleanup, cooldown suppression, sample-rate exclusion, in-memory OTel export, file-store persistence). Two real bugs were caught and fixed during Round 7 itself: `CorsFilterConfig` had been silently missing from `AutoConfiguration.imports` since Round 5 (CORS had been broken in production); `exclude-patterns` existed in code but was never put into the test app's YAML.
 
-Still on the roadmap (not yet committed):
-- OTel tree topology via `ExtendedSpanBuilder.setSpanId(String)` — needs `opentelemetry-api-incubator` added as an optional compile dep; currently `SpanBuilder.setSpanId(byte[])` is not available in the resolved OTel 1.49.0.
+- **Cross-instance `pspanid` fix** (Rounds 8–9) — coordinated two-file change that resolves the MDC key mismatch caught in Round 7 (Ruling 6). `LogAspect` now sets `pspanid = prespanid != null ? prespanid : prepspanid`: in-process nested calls use the calling span's id; cross-instance inbound calls use the upstream parent's span id from the W3C `traceparent` header. `SimpleMonitorServiceImpl.save()` switched its condition from `pspanid == null` to `methodTraceInfoMap.get(pspanid) == null` (null-safe) — true roots and cross-instance inbounds both get saved as top-level entries; in-process children attach only.
+
+- **OTel test environment** (Round 10) — `OtelPropagationIT` body now actually executes end-to-end. The test harness boots the primary context with `method-trace-log.otel.enable=true` and injects the SDK bean into `GlobalOpenTelemetry`, so `Span.current().getSpanContext().isValid()` returns true and the cross-JVM traceid assertion makes sense. `GlobalOpenTelemetry.resetForTest()` cleans up in `@AfterAll`. Was 1 skipped → 0 skipped.
+
+- **Risk-driven testing** (Rounds 12, 16–17) — 92 risks from the 2026-08-29 risk inventory systematically closed: 14 new test classes / 53 new methods in Round 12 (top risks), 8 classes / 74 methods in Round 16 (medium), 13 classes / 97 methods in Round 17 (low). Coverage spans boundaries, properties, concurrency races, eviction races, lifecycle / shutdown paths, resource leaks, and edge cases. Dead code `cn.wubo.method.trace.log.sampler.SampledDecision` deleted (Round 17 R-66, grep confirmed zero production usage).
+
+- **`/code-review` fixes** (Round 13) — 9 real bugs fixed from the code-review run:
+  - `CorsFilterConfig` was registered against `/*` instead of `/methodTraceLog/*` — silently shadowed user-defined filters for other URL patterns.
+  - `ErrorMessagePropertiesPostProcessor` used `addFirst` on the `PropertySources` list, overriding user values from `application.yml` / command line — switched to `addLast` so starter defaults take lowest priority.
+  - `AlertingService` cooldown check-then-put was non-atomic → concurrent duplicates fired webhooks. Now uses `putIfAbsent(key, now)`.
+  - `DecompilerUtils.extractMethod` regex did not match constructors (no return-type group); constructors now match.
+  - `/methodTraceLog/decompile` returned 404 when the method could not be extracted (e.g. constructors) instead of the documented full-class-source fallback — restored the contract; external consumers expecting 404 must adapt.
+  - `SimpleMonitorServiceImpl` cross-thread race caused duplicate root insertion when the parent's `BEFORE` arrived after a child's `BEFORE`; now skips save when the parent already has in-flight children.
+  - `sample-rate` clamp threw on YAML `NaN`/`Infinity`; `Double.isFinite(rate) ? clamp : 1.0` is the fix.
+  - Log path env-post-processor silently succeeded when the directory was non-writable; now probe `Files.isWritable` and throw `IllegalArgumentException` (honors documented fail-fast).
+  - `AlertingService` was discarding the raw `Throwable` via `transContext(info.getContext())`; switched to `info.getRawException()` to preserve the original exception + stack trace.
+
+- **MCP module hardening** (Rounds 14–15) — 18 fixes from the MCP risk inventory. Highlights:
+  - **HTTP timeouts**: 3s connect, 30s read for normal calls / 120s for long-polling. Implemented via `JdkClientHttpRequestFactory` + switched to Apache HttpClient 5 backed by `@Bean(destroyMethod="close") CloseableHttpClient` so the connection pool is released on context shutdown (`spring.lifecycle.timeout-per-shutdown-phase=30s`).
+  - **16 MiB response size cap** via `SizeLimitingClientHttpRequestFactory` (delegating factory with `Content-Length` pre-check + streaming `BoundedInputStream` byte counter — `ExchangeStrategies.maxInMemorySize` doesn't exist on `RestClient.Builder` in Spring 6.2).
+  - **Retry with exponential backoff** for idempotent GETs (2 retries, 100–500ms) via a `ToolOp` enum + `doWithRetry`.
+  - **Structured error JSON** via `safeGet`/`safePost` + `toErrorJson` + cause-chain walker — never leaks stack traces.
+  - **Multi-host config validation** in `@PostConstruct validateHosts()` rejects empty `hosts[]` / duplicate names / blank fields / non-http(s) URLs; cleartext `http://` + non-empty `api-key` emits a WARN.
+  - **`ping` resilience**: tries `/actuator/health` first, falls back to `/methodTraceLog/view/callServices`, returns `HOST_NOT_EXPOSING_ACTUATOR` envelope if both 404.
+  - **URL encoding fix**: `URLEncoder.encode(s, UTF_8).replace("+", "%20")` for RFC 3986 path encoding.
+  - **Argument validation**: `getMethodTraceByTraceId` validates `^[A-Za-z0-9_-]{1,128}$`; `validateLogQueryArgs` clamps `fileName ≤ 256`, `keyword ≤ 1024`, validates ISO 8601 `startTime`/`endTime`.
+  - **Structured audit logging** via `mcp.audit` SLF4J logger; `doWithRetry` emits one `tool= host= path= status= duration=ms` line per call (routed to `System.err` by `logback-spring.xml` so JSON-RPC over stdout stays clean).
+  - **+71 MCP tests** across both rounds (13 → 46 → 84).
+
+- **Performance** (Round 18) — `LogFileService.queryLogs` moved its `page<1` runtime guard to the top of the method, before any `Files.lines().limit(maxScanLines)` read+filter. Added a parallel `pageSize<1` guard. Invalid input now fails fast without paying the file-IO cost; the original post-read page guard is retained as belt-and-braces.
+
+**Test totals after Round 18**: **565 tests** across both modules (475 main module + 90 MCP module), all green, 0 skipped.
 
 
 ---
