@@ -10,6 +10,11 @@ import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.MDC;
 
 import java.lang.reflect.Method;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -23,6 +28,11 @@ import java.util.UUID;
  * pointcut 中排除了框架内部类型（{@link ICallService} / {@link cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint}
  * / {@link cn.wubo.method.trace.log.file.LogFileService} / {@link cn.wubo.method.trace.log.file.LogFileRealTimeService}），
  * 避免追踪到自己。
+ * <p>
+ * 此外，可以通过 {@link MethodTraceLogProperties.LogProperties#excludePatterns}
+ * 配置方法签名黑名单（精确匹配方法名，不区分大小写）。命中的方法会被直接放行：
+ * 不创建 traceid / spanid、不发出任何 BEFORE / AFTER_RETURN / AFTER_THROW 事件，
+ * 用于剔除 lombok / Data 生成的 {@code equals/hashCode/toString/canEqual} 等噪声方法。
  */
 @Slf4j
 @Aspect
@@ -30,6 +40,12 @@ public class LogAspect {
 
     private final CallServiceStrategy callServiceStrategy;
     private final Sampler sampler;
+    /**
+     * 方法名黑名单（小写）。构造时一次性从 {@link MethodTraceLogProperties.LogProperties#excludePatterns}
+     * 拷贝进来，匹配时按 {@link String#equals(Object)} 精确比较（方法名先 toLowerCase 再比较）。
+     * 不可变集合，避免运行期被外部修改。
+     */
+    private final Set<String> excludePatterns;
 
     /** MDC 中 trace 标识的 key，对应 W3C traceparent 中的 trace-id。 */
     public static final String LOG_TRACE_ID = "traceid";
@@ -47,23 +63,63 @@ public class LogAspect {
     public static final String LOG_SAMPLED = "mtlSampled";
 
     /**
-     * 便捷构造：使用 {@link HeadBasedSampler#HeadBasedSampler(double) 默认 100% 采样}。
+     * 便捷构造：使用 {@link HeadBasedSampler#HeadBasedSampler(double) 默认 100% 采样}、空黑名单。
      *
      * @param callServiceStrategy 事件分发器
      */
     public LogAspect(CallServiceStrategy callServiceStrategy) {
-        this(callServiceStrategy, new HeadBasedSampler(1.0));
+        this(callServiceStrategy, new HeadBasedSampler(1.0), Collections.emptyList());
     }
 
     /**
-     * 注入自定义采样器。
+     * 注入自定义采样器，使用空黑名单。
      *
      * @param callServiceStrategy 事件分发器
      * @param sampler             根调用采样器
      */
     public LogAspect(CallServiceStrategy callServiceStrategy, Sampler sampler) {
+        this(callServiceStrategy, sampler, Collections.emptyList());
+    }
+
+    /**
+     * 注入自定义采样器 + 方法黑名单。
+     *
+     * @param callServiceStrategy 事件分发器
+     * @param sampler             根调用采样器
+     * @param excludePatterns     方法名黑名单（精确匹配，不区分大小写；null 或空表示不过滤）
+     */
+    public LogAspect(CallServiceStrategy callServiceStrategy, Sampler sampler, List<String> excludePatterns) {
         this.callServiceStrategy = callServiceStrategy;
         this.sampler = sampler;
+        this.excludePatterns = toLowerCaseSet(excludePatterns);
+    }
+
+    /**
+     * 把 List&lt;String&gt; 拷贝到不可变的小写 Set，便于运行时 O(1) contains 检查。
+     * null / 空 入参 → 空 Set，永不命中。
+     */
+    private static Set<String> toLowerCaseSet(List<String> patterns) {
+        if (patterns == null || patterns.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<String> set = new HashSet<>(patterns.size());
+        for (String p : patterns) {
+            if (p != null && !p.isEmpty()) {
+                set.add(p.toLowerCase(Locale.ROOT));
+            }
+        }
+        return Collections.unmodifiableSet(set);
+    }
+
+    /**
+     * 判断当前方法名是否被黑名单命中。匹配规则：方法名先 toLowerCase，再 equals 集合内元素。
+     * 空黑名单 → 永不命中。protected 便于子类扩展为 glob / 正则匹配。
+     */
+    protected boolean isExcluded(String methodName) {
+        if (methodName == null || excludePatterns.isEmpty()) {
+            return false;
+        }
+        return excludePatterns.contains(methodName.toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -85,6 +141,13 @@ public class LogAspect {
             "!within(cn.wubo.method.trace.log.file.LogFileRealTimeService)")
     public Object around(ProceedingJoinPoint jp) throws Throwable {
         Object returnValue;
+        // 方法签名黑名单短路：命中后直接 proceed()，不创建 traceid / spanid，
+        // 也不发出任何 BEFORE / AFTER_* 事件。这是剔除 lombok / Data 生成的
+        // equals / hashCode / toString / canEqual 等高频样板方法的关键开关。
+        MethodSignature earlySig = (MethodSignature) jp.getSignature();
+        if (isExcluded(earlySig.getName())) {
+            return jp.proceed();
+        }
         // 获取当前线程中已存在的跟踪ID
         String traceid = MDC.get(LOG_TRACE_ID);
         String prepspanid = MDC.get(LOG_PSPAN_ID);
@@ -92,11 +155,18 @@ public class LogAspect {
         String preSampled = MDC.get(LOG_SAMPLED);
         String pspanid = null;
 
-        // 若无跟踪ID，则生成一个新的；否则获取当前跨度ID作为父跨度ID
+        // 若无跟踪ID，则生成一个新的；否则获取当前跨度ID作为父跨度ID。
+        // Round 9 修复：区分两种"继承 trace"场景：
+        //   1. 进程内嵌套调用：上层 LogAspect 已设 LOG_TRACE_ID + LOG_SPAN_ID，prespanid 非 null
+        //      → pspanid = prespanid（外层 spanid）
+        //   2. 跨实例 inbound：W3CTraceContextPropagator 只设了 LOG_TRACE_ID + LOG_PSAN_ID（来自
+        //      traceparent 的 parent-id），LOG_SPAN_ID 是 null（inbound 还没本地 span）
+        //      → pspanid = prepspanid（上游 parent spanid）
+        // 区分信号：prespanid != null → 进程内；prespanid == null → 跨实例。
         if (traceid == null) {
             traceid = UUID.randomUUID().toString();
         } else {
-            pspanid = prespanid;
+            pspanid = prespanid != null ? prespanid : prepspanid;
         }
         // 为当前方法调用生成新的唯一跨度ID
         String spanid = UUID.randomUUID().toString();
@@ -147,6 +217,7 @@ public class LogAspect {
             if (sampled) {
                 // 设置异常信息并执行后置异常处理逻辑
                 after.setContext(AbstractCallService.transContext(e));
+                after.setRawException(e);  // 保留原始异常对象，供 OTel 等需要 Throwable 的下游使用
                 after.setLogActionEnum(LogActionEnum.AFTER_THROW);
                 after.setTimeMillis(System.currentTimeMillis());
                 callServiceStrategy.consumer(after);

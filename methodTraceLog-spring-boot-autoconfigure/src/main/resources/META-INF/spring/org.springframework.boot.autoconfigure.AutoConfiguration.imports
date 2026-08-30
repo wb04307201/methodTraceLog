@@ -1,3 +1,4 @@
 cn.wubo.method.trace.log.autoconfigure.LogConfig
 cn.wubo.method.trace.log.autoconfigure.LogFileConfig
+cn.wubo.method.trace.log.autoconfigure.CorsFilterConfig
 cn.wubo.method.trace.log.autoconfigure.otel.OtelAutoConfig

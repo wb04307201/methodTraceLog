@@ -20,17 +20,53 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <!-- OTel 集成（test 范围也启用是为了本地验证 OTel 桥接） -->
+        <!-- MtlE2eHarness (src/main/.../e2e) needs TestRestTemplate / RestTemplateBuilder at compile scope -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test</artifactId>
+        </dependency>
+        <!-- OTel 集成：compile 范围，用户按 README 启用 OTel 时方可启动 sample app（mvn spring-boot:run / java -jar） -->
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-sdk</artifactId>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>io.opentelemetry</groupId>
             <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+        <!-- OTel SDK testing utilities：InMemorySpanExporter 等。test scope，仅 OtelExportIT 使用。 -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 启用 mvn spring-boot:run 与 java -jar：sample 应用需要打成可执行 fat-jar -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>${spring-boot.version}</version>
+            </plugin>
+            <!-- *IT 后缀走 Surefire 的 Failsafe 风格 include —— 与 *Test 并列运行 -->
+            <!-- reuseForks=false 让每个 *IT 在独立 JVM 中跑，避免 Windows TIME_WAIT 端口冲突 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*TestCase.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                    <reuseForks>false</reuseForks>
+                    <forkCount>1</forkCount>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

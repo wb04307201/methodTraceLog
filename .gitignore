@@ -4,6 +4,15 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# SDD workspace (temporary files from subagent-driven-development)
+.superpowers/
+
+# Local MCP server logs (produced when running methodTraceLog-mcp locally)
+mcp/
+
+# Misc temp files
+.tmp/
+
 ### STS ###
 .apt_generated
 .classpath

@@ -27,13 +27,34 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-web</artifactId>
         </dependency>
+        <!--
+          Round 15 (MCP-R-08): Apache HttpClient 5 backs the forwarding RestClient beans.
+          Its CloseableHttpClient is closed via @Bean(destroyMethod="close") so the connection
+          pool is released cleanly on context shutdown. Version is pinned by spring-boot-dependencies
+          BOM (httpclient5.version = 5.5.2 for spring-boot 3.5.14).
+        -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.springframework.boot</groupId>

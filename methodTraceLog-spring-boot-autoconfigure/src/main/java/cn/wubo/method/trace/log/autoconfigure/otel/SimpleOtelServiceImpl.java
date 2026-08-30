@@ -80,8 +80,14 @@ public class SimpleOtelServiceImpl extends AbstractCallService {
     }
 
     private void startSpan(ServiceCallInfo info) {
-        SpanBuilderWrapper builder = newSpanBuilder(info);
-        Span span = builder.start();
+        Span span;
+        try {
+            SpanIdContext.set(toOtelSpanIdHex(info.getSpanid()));
+            SpanBuilderWrapper builder = newSpanBuilder(info);
+            span = builder.start();
+        } finally {
+            SpanIdContext.clear();
+        }
         try (Scope ignored = span.makeCurrent()) {
             // 设置属性
             span.setAttribute(AttributeKey.stringKey("code.namespace"), info.getClassName());
@@ -105,8 +111,11 @@ public class SimpleOtelServiceImpl extends AbstractCallService {
         try (Scope ignored = span.makeCurrent()) {
             if (info.getLogActionEnum() == LogActionEnum.AFTER_THROW) {
                 span.setStatus(StatusCode.ERROR, "exception");
-                if (info.getContext() instanceof Throwable t) {
-                    span.recordException(t);
+                // 优先走 rawException 旁路：LogAspect 在写 context 之前调过 transContext(e)
+                // 把异常 stringify 了，info.getContext() 不再是 Throwable。
+                Throwable raw = info.getRawException();
+                if (raw != null) {
+                    span.recordException(raw);
                 } else if (info.getContext() != null) {
                     span.setAttribute("error.message", String.valueOf(info.getContext()));
                 }
@@ -137,15 +146,30 @@ public class SimpleOtelServiceImpl extends AbstractCallService {
             }
         } else {
             // 根 span
-            SpanContext rootCtx = rootContext(info.getTraceid());
+            SpanContext rootCtx = rootContext(info.getTraceid(), info.getSpanid());
             wrapper.spanBuilder.setParent(Context.current().with(Span.wrap(rootCtx)));
         }
         return wrapper;
     }
 
-    private static SpanContext rootContext(String traceid) {
+    /**
+     * 构造根调用的“伪父” SpanContext：traceId 用我们自己的 traceid，spanId 用我们自己的 spanid。
+     * <p>
+     * 必须传一个<b>有效</b>的 spanId：W3C 规范里全 0 的 spanId 是非法值，OTel SDK 会把这样的
+     * SpanContext 判为 invalid（等价于“没有父”），从而为每个顶层调用重新生成一个全新的 traceId，
+     * 导致 controller span 与其内部 span 落在不同的 OTel trace 里。传入真实 spanid 后，
+     * OTel 会沿用我们的 traceId。
+     * <p>
+     * 已知限制：OTel SDK 仍会为新建的 span 自行生成 spanId，所以导出的 span 的 spanId
+     * <b>不会</b>等于 {@code info.getSpanid()}。除非替换 SDK 的 IdGenerator，否则无法规避。
+     *
+     * @param traceid 本次 trace 的 id（UUID 形式）
+     * @param spanid  本次根调用的 span id（UUID 形式），作为伪父 spanId 使用
+     */
+    private static SpanContext rootContext(String traceid, String spanid) {
         String otelTraceId = toOtelTraceIdHex(traceid);
-        return SpanContext.create(otelTraceId, "0000000000000000", TraceFlags.getSampled(), TraceState.getDefault());
+        String otelSpanId = toOtelSpanIdHex(spanid);
+        return SpanContext.create(otelTraceId, otelSpanId, TraceFlags.getSampled(), TraceState.getDefault());
     }
 
     private static SpanContext parentContext(ServiceCallInfo info) {

@@ -27,7 +27,10 @@
         const table = document.getElementById('tracesTable');
         table.innerHTML = '<div class="loading"><div class="spinner"></div><p>正在加载…</p></div>';
         mtlFetch('/methodTraceLog/view/list?' + buildParams())
-            .then(r => r.json())
+            .then(r => {
+                if (!r.ok) throw new Error('查询失败 HTTP ' + r.status);
+                return r.json();
+            })
             .then(data => {
                 if (!data || data.length === 0) { renderEmpty('未匹配到任何调用记录'); return; }
                 const title = document.getElementById('traceTableTitle');

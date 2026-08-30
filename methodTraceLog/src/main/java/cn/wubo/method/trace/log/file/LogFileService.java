@@ -50,7 +50,7 @@ public class LogFileService {
     /**
      * 获取日志文件列表
      *
-     * @return 日志文件信息列表，每个元素包含文件名、大小、最后修改时间和可读性信息
+     * @return 日志文件信息列表，每个元素包含文件名、大小、人类可读大小、最后修改时间和可读性信息
      */
     public List<Map<String, Object>> getLogFiles() {
         File logDir = new File(properties.getLogPath());
@@ -64,12 +64,39 @@ public class LogFileService {
 
         return Arrays.stream(files)
                 .filter(this::isValidFileExtensions)
-                .map(file -> Map.<String, Object>of(
-                        "name", file.getName(),
-                        "size", file.length(),
-                        "lastModified", file.lastModified(),
-                        "readable", file.canRead()))
+                .map(file -> {
+                    long bytes = file.length();
+                    Map<String, Object> m = new java.util.LinkedHashMap<>();
+                    m.put("name", file.getName());
+                    m.put("size", bytes);
+                    m.put("humanReadableSize", formatSize(bytes));
+                    m.put("lastModified", file.lastModified());
+                    m.put("readable", file.canRead());
+                    return m;
+                })
                 .toList();
+    }
+
+    /**
+     * 把字节数渲染为人类可读字符串。
+     * <p>
+     * 单位从 B → KB → MB → GB → TB 自动升级，保留 1 位小数；不足 1KB 的按整数字节输出。
+     *
+     * @param bytes 文件字节数（≥0）
+     * @return 例如 "1 B" / "1.0 KB" / "1.5 MB" / "150.5 GB"
+     */
+    public static String formatSize(long bytes) {
+        if (bytes < 1024L) {
+            return bytes + " B";
+        }
+        String[] units = {"KB", "MB", "GB", "TB"};
+        double v = bytes / 1024.0;
+        int u = 0;
+        while (v >= 1024.0 && u < units.length - 1) {
+            v /= 1024.0;
+            u++;
+        }
+        return String.format("%.1f %s", v, units[u]);
     }
 
 
@@ -97,6 +124,17 @@ public class LogFileService {
     public LogQueryResponse queryLogs(LogQueryRequest request) throws IOException {
         String fileName = request.getFileName();
 
+        // 防御：page / pageSize 非法 → IllegalArgumentException（与 LogQueryRequest @Min(1) 的契约对齐）。
+        // 否则 startIndex = (page - 1) * pageSize 会变成负数，subList(-N, ...) 直接抛
+        // IndexOutOfBoundsException —— 用户看到的是底层 NPE / IOOBE，不是"分页参数非法"的清晰错误。
+        // 这一段必须在文件读取之前：fail-fast，避免无效请求付出 IO + 解析 + 过滤的全量代价。
+        if (request.getPage() < 1) {
+            throw new IllegalArgumentException("page must be >= 1, got: " + request.getPage());
+        }
+        if (request.getPageSize() < 1) {
+            throw new IllegalArgumentException("pageSize must be >= 1, got: " + request.getPageSize());
+        }
+
         File logFile = getFile(fileName);
 
         int maxScanLines = Math.max(properties.getScanLines(), 1000);
@@ -111,6 +149,11 @@ public class LogFileService {
         }
 
         int totalLines = filteredLines.size();
+        // belt-and-braces：上面的早返回已经做了 page<1/pageSize<1 校验；这里保留同样校验
+        // 作为防御性深度防御 —— 即便校验被未来的重构挪走，下面算 startIndex 的逻辑仍然安全。
+        if (request.getPage() < 1) {
+            throw new IllegalArgumentException("page must be >= 1, got: " + request.getPage());
+        }
         int totalPages = (int) Math.ceil((double) totalLines / request.getPageSize());
         int startIndex = (request.getPage() - 1) * request.getPageSize();
         int endIndex = Math.min(startIndex + request.getPageSize(), totalLines);

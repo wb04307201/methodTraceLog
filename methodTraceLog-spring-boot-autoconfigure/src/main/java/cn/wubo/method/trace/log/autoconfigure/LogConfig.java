@@ -4,6 +4,9 @@ import cn.wubo.method.trace.log.CallServiceStrategy;
 import cn.wubo.method.trace.log.ICallService;
 import cn.wubo.method.trace.log.LogAspect;
 import cn.wubo.method.trace.log.MethodTraceLogProperties;
+import cn.wubo.method.trace.log.alerting.AlertEvent;
+import cn.wubo.method.trace.log.alerting.AlertingService;
+import cn.wubo.method.trace.log.analyze.SlowMethodAnalyzer;
 import cn.wubo.method.trace.log.impl.log.SimpleLogServiceImpl;
 import cn.wubo.method.trace.log.impl.monitor.MethodTraceLogEndPoint;
 import cn.wubo.method.trace.log.impl.monitor.SimpleMonitorServiceImpl;
@@ -17,10 +20,14 @@ import cn.wubo.method.trace.log.store.NoOpTraceStore;
 import cn.wubo.method.trace.log.utils.DecompilerUtils;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.Cookie;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.client.RestTemplateCustomizer;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.core.Ordered;
@@ -28,17 +35,23 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.servlet.function.HandlerFunction;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.RouterFunctions;
+import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @AutoConfiguration
 @EnableAspectJAutoProxy
 @ConditionalOnExpression("${method-trace-log.log.enable:true}")
 @EnableConfigurationProperties(MethodTraceLogProperties.class)
+@Slf4j
 public class LogConfig {
 
     @Bean
@@ -51,9 +64,14 @@ public class LogConfig {
 
     @Bean
     public Sampler mtlSampler(MethodTraceLogProperties properties) {
-        double rate = properties.getLog() == null || properties.getLog().getSampleRate() == null
-                ? 1.0
-                : properties.getLog().getSampleRate();
+        Double raw = properties.getLog() == null ? null : properties.getLog().getSampleRate();
+        double rate = raw == null ? 1.0 : raw;
+        // clamp 到 [0.0, 1.0]：HeadBasedSampler 构造器对越界值会抛 IllegalArgumentException，
+        // 导致整个 Spring 上下文启动失败。把超界值夹到合法区间即可保持应用可用。
+        // 另：必须先用 Double.isFinite 把 NaN / Infinity 排除掉 —— Math.max/min 在 NaN
+        // 上行为未定义（NaN 会被传播），最终 HeadBasedSampler 拿到 NaN 同样抛 IAE。
+        // NaN / Infinity 走 1.0 兜底（"采样一切"是更安全的语义）。
+        rate = Double.isFinite(rate) ? Math.max(0.0, Math.min(1.0, rate)) : 1.0;
         return new HeadBasedSampler(rate);
     }
 
@@ -78,7 +96,7 @@ public class LogConfig {
                     ts.getMaxTraces(),
                     ts.isRebuildIndexOnStart());
             case "none" -> NoOpTraceStore.INSTANCE;
-            default -> new InMemoryTraceStore();
+            default -> new InMemoryTraceStore(ts.getMaxTraces());
         };
     }
 
@@ -106,8 +124,25 @@ public class LogConfig {
     }
 
     @Bean
-    public LogAspect logAspect(CallServiceStrategy callServiceStrategy, Sampler sampler) {
-        return new LogAspect(callServiceStrategy, sampler);
+    public LogAspect logAspect(CallServiceStrategy callServiceStrategy, Sampler sampler, MethodTraceLogProperties properties) {
+        List<String> excludePatterns = properties.getLog() == null || properties.getLog().getExcludePatterns() == null
+                ? java.util.Collections.emptyList()
+                : properties.getLog().getExcludePatterns();
+        return new LogAspect(callServiceStrategy, sampler, excludePatterns);
+    }
+
+    /**
+     * 异常告警服务。仅当 {@code method-trace-log.alerting.enable=true} 时注册。
+     * <p>
+     * 用 {@code @Bean} 显式注册（而不是让 {@code @Component} 扫描）是为了注入构造参数：
+     * AlertingProperties + RestClient + Clock。注册后会被 {@link CallServiceStrategy}
+     * 自动收进 ICallService 列表。
+     */
+    @Bean
+    @ConditionalOnExpression("${method-trace-log.alerting.enable:false}")
+    public AlertingService alertingService(MethodTraceLogProperties properties) {
+        RestClient client = RestClient.create();
+        return new AlertingService(properties.getAlerting(), client, Clock.systemUTC());
     }
 
     /**
@@ -166,14 +201,118 @@ public class LogConfig {
         return new TraceContextRestTemplateInterceptor();
     }
 
+    /**
+     * 把 {@link TraceContextRestTemplateInterceptor} 自动挂到 Spring Boot 自动配置的
+     * {@code RestTemplateBuilder} 上，使得 {@code restTemplateBuilder.build()} 得到的
+     * RestTemplate 天然带 traceparent 出站头，用户无需手工 setInterceptors。
+     * <p>
+     * 注意：Spring Boot 并没有 {@code RestTemplate.Builder} 这个类型；正确的扩展点是
+     * {@code RestTemplateCustomizer} —— {@code RestTemplateAutoConfiguration} 会把容器中
+     * 所有 RestTemplateCustomizer 应用到它暴露的 RestTemplateBuilder 上。因此这里注册
+     * customizer（而不是再定义一个 RestTemplateBuilder Bean 去覆盖 Boot 自己的那个）。
+     * <p>
+     * 直接用 RestTemplate 而非 builder 的用户仍可自行注入 interceptor Bean 手工设置。
+     */
+    @Bean
+    @ConditionalOnExpression("${method-trace-log.propagate.rest-template-interceptor:true}")
+    public RestTemplateCustomizer mtlTraceContextRestTemplateCustomizer(
+            ObjectProvider<TraceContextRestTemplateInterceptor> interceptorProvider) {
+        return restTemplate -> {
+            TraceContextRestTemplateInterceptor interceptor = interceptorProvider.getIfAvailable();
+            if (interceptor == null) {
+                return;
+            }
+            // 幂等：同一个 RestTemplate 被多次 customize 时不重复添加
+            boolean present = restTemplate.getInterceptors().stream()
+                    .anyMatch(TraceContextRestTemplateInterceptor.class::isInstance);
+            if (!present) {
+                restTemplate.getInterceptors().add(interceptor);
+            }
+        };
+    }
+
+    /**
+     * 慢方法聚合器：从 Micrometer registry 读 {@code method.execution.time} Timer。
+     * 无条件注册（纯读取，无副作用），端点在告警关闭时也能用。
+     */
+    @Bean
+    public SlowMethodAnalyzer slowMethodAnalyzer(MeterRegistry meterRegistry) {
+        return new SlowMethodAnalyzer(meterRegistry);
+    }
+
+    /**
+     * 注册 JVM shutdown hook：保证在收到关闭信号（Ctrl+C / System.exit / Spring
+     * 自身调用）时显式 {@link ConfigurableApplicationContext#close()}，从而
+     * 触发 {@code @PreDestroy} 与 {@code DisposableBean.destroy()} 链路，确保
+     * {@code LogFileRealTimeService} 的 WatchService / executor 被及时释放。
+     * <p>
+     * 这是对 Spring Boot 自身注册的那个 hook 的冗余加固——后者在 Windows 上
+     * 同样依赖 JVM 关闭信号；本 hook 仅多打一行日志，并幂等地再次调用 close，
+     * 不会引发问题。
+     */
+    @Bean
+    public MtlShutdownHook mtlShutdownHook(ConfigurableApplicationContext ctx) {
+        return new MtlShutdownHook(ctx);
+    }
+
+    /**
+     * 进程关闭钩子：日志记录 + 兜底调用 context.close()。通过把代码塞进
+     * 一个独立类，避免 LogConfig 的 import 体出现 sun.misc 等平台相关 API。
+     */
+    static final class MtlShutdownHook {
+        private final ConfigurableApplicationContext ctx;
+
+        MtlShutdownHook(ConfigurableApplicationContext ctx) {
+            this.ctx = ctx;
+            Runtime.getRuntime().addShutdownHook(new Thread(this::onShutdown, "mtl-shutdown-hook"));
+        }
+
+        private void onShutdown() {
+            try {
+                log.info("mtl: shutdown hook triggered");
+                if (ctx != null && ctx.isActive()) {
+                    ctx.close();
+                }
+            } catch (Exception e) {
+                log.warn("mtl: shutdown hook failed: {}", e.getMessage());
+            }
+        }
+    }
+
     @Bean("wb04307201MethodTraceLogRouter")
-    public RouterFunction<ServerResponse> methodTraceLogRouter(CallServiceStrategy callServiceStrategy, SimpleMonitorServiceImpl simpleMonitorService, MethodTraceLogProperties properties, MtlSessionService sessionService) {
+    public RouterFunction<ServerResponse> methodTraceLogRouter(CallServiceStrategy callServiceStrategy, SimpleMonitorServiceImpl simpleMonitorService, MethodTraceLogProperties properties, MtlSessionService sessionService, Optional<AlertingService> alertingService, SlowMethodAnalyzer slowMethodAnalyzer) {
         RouterFunctions.Builder builder = RouterFunctions.route();
         builder.GET("/methodTraceLog/panel", request -> ServerResponse.ok().contentType(MediaType.TEXT_HTML).body(new ClassPathResource(("/panel.html"))));
-        commonRouter(builder, callServiceStrategy, simpleMonitorService);
+        commonRouter(builder, callServiceStrategy, simpleMonitorService, alertingService, slowMethodAnalyzer);
         authRouter(builder, properties, sessionService);
         decompileRouter(builder, properties);
-        return builder.build();
+        RouterFunction<ServerResponse> built = builder.build();
+        return built.filter(this::handleErrors);
+    }
+
+    /**
+     * RouterFunction 统一异常映射：
+     *  - {@link ResponseStatusException} 原样透传（已经表达了正确的 4xx）
+     *  - {@link IllegalArgumentException} → 400 bad_request
+     *  - 其他 {@link Exception}          → 500 internal_error（带异常类名便于诊断）
+     * <p>
+     * 通过 filter 而不是 handler 函数内 try/catch，让所有路由（含后续新增）共享同一套映射。
+     * <p>
+     * 实现成 {@link HandlerFilterFunction}：必须透传 {@code next.handle} 的返回值；
+     * 异常仍以 throw 形式抛出，由 Spring 的 DefaultHandlerExceptionResolver 统一翻译成响应体。
+     */
+    ServerResponse handleErrors(ServerRequest req, HandlerFunction<ServerResponse> next) throws Exception {
+        try {
+            return next.handle(req);
+        } catch (ResponseStatusException rse) {
+            throw rse;
+        } catch (IllegalArgumentException iae) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, iae.getMessage(), iae);
+        } catch (Exception e) {
+            log.error("methodTraceLog router error: {} {}", req.method(), req.uri(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "internal_error: " + e.getClass().getSimpleName(), e);
+        }
     }
 
     /**
@@ -273,7 +412,7 @@ public class LogConfig {
         });
     }
 
-    private void commonRouter(RouterFunctions.Builder builder, CallServiceStrategy callServiceStrategy, SimpleMonitorServiceImpl simpleMonitorService) {
+    private void commonRouter(RouterFunctions.Builder builder, CallServiceStrategy callServiceStrategy, SimpleMonitorServiceImpl simpleMonitorService, Optional<AlertingService> alertingServiceOpt, SlowMethodAnalyzer slowMethodAnalyzer) {
         builder.GET("/methodTraceLog/view/callServices", request -> ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(callServiceStrategy.getCallServices()));
         builder.GET("/methodTraceLog/view/callService", request -> {
                     String name = request.param("name").orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "name is required"));
@@ -296,7 +435,11 @@ public class LogConfig {
         });
         builder.GET("/methodTraceLog/view/traceid", request -> {
                     String id = request.param("id").orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "id is required"));
-                    return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(simpleMonitorService.getByTraceId(id));
+                    var trace = simpleMonitorService.getByTraceId(id);
+                    if (trace == null) {
+                        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "trace not found: " + id);
+                    }
+                    return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(trace);
                 }
         );
         // /view/export?format=json|csv  导出最近根 trace 列表
@@ -315,6 +458,22 @@ public class LogConfig {
                         .body(csv);
             }
             return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(data);
+        });
+
+        // /view/alerts?limit=50  最近告警事件；alerting 未启用时返回空 list（不 404）
+        builder.GET("/methodTraceLog/view/alerts", request -> {
+            int limit = Math.max(1, Math.min(100, parseIntSafe(request.param("limit").orElse("50"), 50)));
+            List<AlertEvent> events = alertingServiceOpt
+                    .map(svc -> svc.getRecent(limit))
+                    .orElseGet(List::of);
+            return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(events);
+        });
+
+        // /view/slowMethods?windowMinutes=5&topN=10  最慢方法 topN
+        builder.GET("/methodTraceLog/view/slowMethods", request -> {
+            int windowMin = Math.max(1, parseIntSafe(request.param("windowMinutes").orElse("5"), 5));
+            int topN = Math.max(1, Math.min(200, parseIntSafe(request.param("topN").orElse("10"), 10)));
+            return ServerResponse.ok().contentType(MediaType.APPLICATION_JSON).body(slowMethodAnalyzer.analyze(windowMin, topN));
         });
 
     }
@@ -366,7 +525,9 @@ public class LogConfig {
      * <p>
      * GET /methodTraceLog/decompile?className=foo.Bar&methodName=baz&timeoutSeconds=10
      * <p>
-     * 返回 String 文本（plain/text），内容为去掉注解后的 Java 源码。
+     * 返回 String 文本（plain/text），内容为去掉注解后、只含目标方法的 Java 源码；
+     * 若无法从整类源码中切出目标方法（例如方法名为构造器 {@code Foo}，或正则
+     * 因为 CFR 病态输出没匹配上），则 fallback 返回整类源码。
      * 异常会由 RouterFunction 框架包装为 4xx/5xx + 简单 message body。
      */
     private void decompileRouter(RouterFunctions.Builder builder, MethodTraceLogProperties properties) {
@@ -386,7 +547,12 @@ public class LogConfig {
                     })
                     .orElse(defaultTimeout);
             String src = DecompilerUtils.decompile(className, methodName, timeout);
-            return ServerResponse.ok().contentType(MediaType.TEXT_PLAIN).body(DecompilerUtils.removeAnnotations(src));
+            String stripped = DecompilerUtils.removeAnnotations(src);
+            // 优先返回切出的方法源码；切不到时 fallback 到全量类源码（保留 javadoc 中承诺的行为）。
+            // Fallback 涵盖：构造器（无返回类型）、CFR 输出换行/格式特殊让正则没匹配上、etc.
+            String body = DecompilerUtils.extractMethod(stripped, methodName)
+                    .orElse(stripped);
+            return ServerResponse.ok().contentType(MediaType.TEXT_PLAIN).body(body);
         });
     }
 

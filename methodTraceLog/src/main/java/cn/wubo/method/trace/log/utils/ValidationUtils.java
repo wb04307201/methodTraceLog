@@ -7,6 +7,15 @@ import lombok.experimental.UtilityClass;
 
 import java.util.Set;
 
+/**
+ * Bean Validation 工具：把 {@link Validator} 的 {@link ConstraintViolation} 异常
+ * 转为更友好的 {@link IllegalArgumentException}，供 Starter 在 RouterFunction 的 catch 块里捕获。
+ * <p>
+ * 典型用法：
+ * <pre>{@code
+ *   ValidationUtils.validate(validator, requestDto);  // 抛 ConstraintViolationException 或无异常
+ * } }</pre>
+ */
 @UtilityClass
 public class ValidationUtils {
 

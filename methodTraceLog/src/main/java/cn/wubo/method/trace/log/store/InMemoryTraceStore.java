@@ -3,21 +3,45 @@ package cn.wubo.method.trace.log.store;
 import cn.wubo.method.trace.log.impl.monitor.MethodTraceInfo;
 
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
  * 内存版 TraceStore。
  * <p>
- * 用 {@link CopyOnWriteArrayList} 保存根节点（读多写少），用 {@link ConcurrentHashMap} 索引 traceId → 根。
+ * 用 {@link ConcurrentLinkedDeque} 保存根节点（无锁头插 + 范围删除），用 {@link ConcurrentHashMap} 索引 traceId → 根。
+ * 与之前的 {@link java.util.concurrent.CopyOnWriteArrayList} 相比，
+ * 写入不再需要拷贝整个底层数组，N 大时写入开销显著降低。
+ * <p>
  * 写入时如果 traceId 已存在则覆盖（保持最新版本），避免出现孤儿根节点。
+ * <p>
+ * 通过构造参数 {@code maxTraces} 限制内存中保留的根 trace 数量；超出时按写入顺序淘汰最旧条目。
  */
 public class InMemoryTraceStore implements ITraceStore {
 
-    private final List<MethodTraceInfo> roots = new CopyOnWriteArrayList<>();
+    private final Deque<MethodTraceInfo> roots = new ConcurrentLinkedDeque<>();
     private final Map<String, MethodTraceInfo> traceIdIndex = new ConcurrentHashMap<>();
+    private final int maxTraces;
+
+    /**
+     * 创建 InMemoryTraceStore。
+     *
+     * @param maxTraces 内存中保留的最大根 trace 数；{@code <= 0} 表示不限制（兼容旧用法）
+     */
+    public InMemoryTraceStore(int maxTraces) {
+        this.maxTraces = maxTraces;
+    }
+
+    /**
+     * 无参构造：保留最大根 trace 数 = Integer.MAX_VALUE（即不限制，兼容旧调用方）。
+     */
+    public InMemoryTraceStore() {
+        this(Integer.MAX_VALUE);
+    }
 
     @Override
     public void save(MethodTraceInfo root) {
@@ -27,24 +51,35 @@ public class InMemoryTraceStore implements ITraceStore {
         String traceid = root.getBefore().getTraceid();
         MethodTraceInfo existing = traceIdIndex.get(traceid);
         if (existing == null) {
-            // 防止 save 期间并发插入两次
-            synchronized (traceIdIndex) {
-                existing = traceIdIndex.get(traceid);
-                if (existing == null) {
-                    roots.add(0, root); // 最新在前
-                    traceIdIndex.put(traceid, root);
-                    return;
-                }
+            MethodTraceInfo prev = traceIdIndex.putIfAbsent(traceid, root);
+            if (prev == null) {
+                // 最新在前
+                roots.addFirst(root);
+                evictIfNeeded();
+                return;
             }
+            existing = prev;
         }
-        // 覆盖：直接替换 roots 中的引用
-        for (int i = 0; i < roots.size(); i++) {
-            if (roots.get(i) == existing) {
-                roots.set(i, root);
-                break;
-            }
-        }
+        // 覆盖：ConcurrentLinkedDeque 没有按值定位的 API，先删除旧的再头插新的
+        roots.remove(existing);
+        roots.addFirst(root);
         traceIdIndex.put(traceid, root);
+        evictIfNeeded();
+    }
+
+    /**
+     * 超过 maxTraces 时淘汰最旧条目（队列尾部）。
+     */
+    private void evictIfNeeded() {
+        if (maxTraces <= 0) {
+            return;
+        }
+        while (roots.size() > maxTraces) {
+            MethodTraceInfo evicted = roots.pollLast();
+            if (evicted != null && evicted.getBefore() != null) {
+                traceIdIndex.remove(evicted.getBefore().getTraceid());
+            }
+        }
     }
 
     @Override
@@ -57,8 +92,12 @@ public class InMemoryTraceStore implements ITraceStore {
         if (limit <= 0) {
             return List.of();
         }
-        int n = Math.min(limit, roots.size());
-        return new ArrayList<>(roots.subList(0, n));
+        List<MethodTraceInfo> out = new ArrayList<>(Math.min(limit, roots.size()));
+        Iterator<MethodTraceInfo> it = roots.iterator();
+        while (it.hasNext() && out.size() < limit) {
+            out.add(it.next());
+        }
+        return out;
     }
 
     @Override
@@ -67,16 +106,18 @@ public class InMemoryTraceStore implements ITraceStore {
             return;
         }
         long now = System.currentTimeMillis();
-        roots.removeIf(info -> {
+        Iterator<MethodTraceInfo> it = roots.iterator();
+        while (it.hasNext()) {
+            MethodTraceInfo info = it.next();
             if (info == null || info.getBefore() == null) {
-                return true;
+                it.remove();
+                continue;
             }
             if (now - info.getBefore().getTimeMillis() > maxAgeMillis) {
                 traceIdIndex.remove(info.getBefore().getTraceid());
-                return true;
+                it.remove();
             }
-            return false;
-        });
+        }
     }
 
     @Override

@@ -1,5 +1,6 @@
 package cn.wubo.method.trace.log;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -29,6 +30,32 @@ public class ServiceCallInfo {
     private LogActionEnum logActionEnum;
     private Long timeMillis;
 
+    /**
+     * 原始异常对象，仅在 {@code AFTER_THROW} 时由 {@link LogAspect} 写入。
+     * <p>
+     * {@link #context} 在进入 {@link CallServiceStrategy} 之前已被
+     * {@link AbstractCallService#transContext(Object)} 转成字符串，下游拿不到真正的
+     * {@link Throwable}，因此像 OTel 的 {@code span.recordException(t)} 这类需要异常对象
+     * （才能记录 stacktrace）的消费者必须走这个旁路字段。
+     * <p>
+     * 标注 {@link JsonIgnore}：本字段只在进程内传递，不参与序列化。若被 Jackson 序列化，
+     * 面板导出（/view/export）与 {@link cn.wubo.method.trace.log.store.FileTraceStore}
+     * 落盘的每条记录都会被完整 stacktrace 撑大。
+     */
+    @JsonIgnore
+    private transient Throwable rawException;
+
+
+    /**
+     * 兼容构造：不带 {@link #rawException} 的全字段构造。
+     * <p>
+     * {@code rawException} 是后加的进程内旁路字段，Lombok 的 {@code @AllArgsConstructor}
+     * 因此变成 12 参。保留这个 11 参重载，避免破坏已有调用方（{@code ICallService} 是对外
+     * 扩展点，下游可能直接构造本类）。
+     */
+    public ServiceCallInfo(String traceid, String pspanid, String spanid, String className, String classSimpleName, String methodName, String methodSignatureShortString, String methodSignatureLongString, Object context, LogActionEnum logActionEnum, Long timeMillis) {
+        this(traceid, pspanid, spanid, className, classSimpleName, methodName, methodSignatureShortString, methodSignatureLongString, context, logActionEnum, timeMillis, null);
+    }
 
     /**
      * 便利构造：从 AspectJ {@link MethodSignature} 一次性提取类名 / 简单类名 / 方法名 / 短签名 / 长签名。
@@ -76,7 +103,8 @@ public class ServiceCallInfo {
                 original.getMethodSignatureLongString(),
                 original.getContext(),
                 original.getLogActionEnum(),
-                original.getTimeMillis());
+                original.getTimeMillis(),
+                original.getRawException());
     }
 
 }

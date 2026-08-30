@@ -28,7 +28,7 @@
 | **OTel export** | Auto-bridges trace events to OpenTelemetry OTLP/HTTP when `opentelemetry-sdk` is on the classpath |
 | **W3C traceparent** | Auto-injects / extracts `traceparent` header for HTTP inbound and `RestClient` outbound |
 | **Cookie session** | Browser login via `POST /methodTraceLog/login`, HTTP `X-Api-Key` for CLI / MCP |
-| **MCP server** | Standalone stdio process; 13 tools, multi-host, forwards to your starter over HTTP |
+| **MCP server** | Standalone stdio process; 15 tools, multi-host, forwards to your starter over HTTP |
 
 ---
 
@@ -40,7 +40,7 @@
 <dependency>
     <groupId>io.github.wb04307201</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.20</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
@@ -75,9 +75,10 @@ management:
 method-trace-log:
   log:
     enable: true                                  # AOP master switch
-    sample-rate: 1.0                              # 0.0 ~ 1.0; child spans inherit parent decision
+    sample-rate: 1.0                              # 0.0 ~ 1.0; child spans inherit parent decision (clamped on startup)
+    exclude-patterns: []                          # method-name blacklist (case-insensitive equals match); hit → proceed() directly, no events emitted. e.g. [equals, hashCode, toString, canEqual]
     service-calls:                                # start-up enable flags
-      - { name: CustomLog,         enable: false }   # 3 built-in services: SimpleLogService / SimpleMonitorService / CustomLog
+      - { name: CustomLog,         enable: false }   # built-in services: SimpleLogService / SimpleMonitorService / AlertingService / CustomLog
     trace-store:                                  # where the in-memory tree lives
       type: in-memory                             # in-memory | file | none
       path: ./trace-store                         # only when type=file (auto-creates yyyy-MM-dd subdirs)
@@ -89,11 +90,19 @@ method-trace-log:
     path: ./logs
     allowed-extensions: [.log, .txt, .out]
     scan-lines: 10000                             # stream-scan line cap; Files.lines() + limit() is lazy, so the file itself can be arbitrarily large — no size check
+    max-file-size: 100MB                          # per-file size cap (default; set to 0/null = no limit)
+    total-size-cap: 10GB                          # cumulative cap across all rolled files in the dir
     # log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
   security:
     api-key: change-me-in-production              # empty = no auth
     session:
       ttl-millis: 28800000                        # 8h sliding session for browser cookies
+    cors:                                         # CORS for browser panels on different origins (opt-in: empty allowed-origins = disabled)
+      allowed-origins: []                         # ["https://your-panel.example.com"]; ["*"] = all (incompatible with credentials)
+      allowed-methods: [GET, POST, OPTIONS, DELETE, PUT]
+      allowed-headers: [Content-Type, X-Api-Key, Authorization]
+      allow-credentials: false                    # true requires allowed-origins NOT be "*"
+      max-age: 0                                  # preflight cache seconds (0 = always re-validate)
   decompile:
     timeout-seconds: 10                           # CFR daemon-thread timeout
   otel:                                           # requires opentelemetry-sdk on classpath
@@ -109,6 +118,14 @@ method-trace-log:
     http-inbound: true                            # TraceContextFilter reads traceparent
     rest-client-outbound: true                    # RestClient.Builder interceptor
     rest-template-interceptor: true               # exposes a RestTemplate interceptor bean
+  alerting:                                       # exception alerting — opt-in; off by default
+    enable: false                                 # true registers AlertingService as an ICallService
+    webhook-url: ""                               # empty = log only; non-empty POSTs events (best-effort, async)
+    threshold:
+      error-count: 10                             # errors per class#method within window to fire
+      window-seconds: 60                          # sliding-window length
+    cooldown-seconds: 300                         # suppress repeat alerts for the same key
+    classes: []                                   # whitelist prefix list; empty = alert on every class
 ```
 
 ---
@@ -125,6 +142,8 @@ All routes require `X-Api-Key` (or `MTRACE_SESSION` cookie) when `security.api-k
 | GET | `/methodTraceLog/view/list?className=&methodName=&onlyErrors=&limit=` | Recent root traces |
 | GET | `/methodTraceLog/view/traceid?id=` | Full call chain for a trace id |
 | GET | `/methodTraceLog/view/export?format=json\|csv&className=&methodName=&onlyErrors=&limit=` | Bulk export (default limit 1000) |
+| GET | `/methodTraceLog/view/alerts?limit=` | Recent alert events (default limit 50; empty list when alerting disabled) |
+| GET | `/methodTraceLog/view/slowMethods?windowMinutes=&topN=` | Slowest methods top-N from Micrometer histograms (default 5min / top 10) |
 | GET | `/methodTraceLog/decompile?className=&methodName=&timeoutSeconds=` | Text/plain source |
 | GET | `/methodTraceLog/logFile/files` | List log files in the configured dir |
 | POST | `/methodTraceLog/logFile/query` | Filter / paginate / time-range / level |
@@ -217,7 +236,7 @@ MCP server config (`mcpServers` JSON block) for AI clients like Claude Desktop, 
     "sql-forge-mcp": {
       "command": "jbang.cmd",
       "args": [
-        "io.github.wb04307201:methodTraceLog-mcp:1.0.20",
+        "io.github.wb04307201:methodTraceLog-mcp:1.1.0",
         "--method-trace-log.mcp.hosts[0].name=local-dev",
         "--method-trace-log.mcp.hosts[0].url=http://localhost:8080",
         "--method-trace-log.mcp.hosts[0].description=Local dev",
@@ -228,7 +247,7 @@ MCP server config (`mcpServers` JSON block) for AI clients like Claude Desktop, 
 }
 ```
 
-**13 tools exposed:** `getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`.
+**15 tools exposed:** `getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `getAlerts`, `getSlowMethods`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`.
 
 ---
 

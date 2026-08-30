@@ -2,11 +2,15 @@ spring:
   main:
     web-application-type: none
     banner-mode: off
+  # Round 15 (MCP-R-08): give Spring 30s to drain on SIGTERM / Ctrl+C before forcing shutdown.
+  # The CloseableHttpClient connection pool must be closed in that window to avoid leaks.
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   ai:
     mcp:
       server:
         name: methodTraceLog-mcp-server
-        version: 1.0.20
+        version: @project.version@
 
 # Hosts to expose to AI agents. Each host must be a running Spring Boot app
 # that has the methodTraceLog-spring-boot-starter on the classpath.

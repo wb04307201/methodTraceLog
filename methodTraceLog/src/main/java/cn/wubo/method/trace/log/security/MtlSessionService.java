@@ -59,7 +59,7 @@ public class MtlSessionService {
         random.nextBytes(bytes);
         StringBuilder sb = new StringBuilder(32);
         for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
+            sb.append(String.format("%02x", b & 0xff));
         }
         String sid = sb.toString();
         sessions.put(sid, System.currentTimeMillis() + ttlMillis);

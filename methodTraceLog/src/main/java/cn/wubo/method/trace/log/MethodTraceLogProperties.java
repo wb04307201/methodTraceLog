@@ -10,7 +10,7 @@ import java.util.*;
 
 /**
  * 顶层配置：根前缀 {@code method-trace-log}。
- * 包含 6 个嵌套组：log / file / security / decompile / otel / propagate。
+ * 包含 7 个嵌套组：log / file / security / decompile / otel / propagate / alerting。
  * 默认实例化所有非空子组，用户在 application.yml 里只覆盖需要改的字段即可。
  */
 @Data
@@ -50,7 +50,13 @@ public class MethodTraceLogProperties {
     private PropagateProperties propagate = new PropagateProperties();
 
     /**
-     * AOP 切面与 ICallService 启用配置：总开关、采样率、trace 持久化、初始服务列表。
+     * 异常告警配置：滑动窗口错误阈值 + cooldown + webhook 推送。默认关闭。
+     */
+    @NestedConfigurationProperty
+    private AlertingProperties alerting = new AlertingProperties();
+
+    /**
+     * AOP 切面与 ICallService 启用配置：总开关、采样率、trace 持久化、初始服务列表、方法黑名单。
      */
     @Data
     public static class LogProperties {
@@ -68,6 +74,16 @@ public class MethodTraceLogProperties {
          * trace 持久化配置。
          */
         private TraceStoreProperties traceStore = new TraceStoreProperties();
+
+        /**
+         * 方法签名黑名单（精确匹配 simpleMethodName，不区分大小写）。
+         * 例如 {@code ["equals", "hashCode", "toString", "canEqual"]} 可排除 lombok / Data
+         * 生成的常见样板方法以及所有 DTO / Map 迭代时会大量触发的方法。
+         * 命中后 {@link cn.wubo.method.trace.log.LogAspect} 直接调用 proceed()，
+         * 不会发出任何 BEFORE / AFTER_RETURN / AFTER_THROW 事件。
+         * 默认空 = 不排除任何方法。
+         */
+        private List<String> excludePatterns = new ArrayList<>();
 
         /**
          * 单个 ICallService 的启动时 enable 配置。name 与 {@code ICallService.getCallServiceName()} 对齐。
@@ -149,10 +165,20 @@ public class MethodTraceLogProperties {
          * 日志文件匹配模式
          */
         private String logPattern = "(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3})\\s+\\[([^\\]]+)\\]\\s+(\\w+)\\s+([^\\s]+)\\s*-\\s*(.*)";
+
+        /**
+         * 单个日志文件最大尺寸，支持 B/KB/MB/GB。null = 不限制（保留兼容）。
+         */
+        private String maxFileSize = "100MB";
+
+        /**
+         * 该目录下所有滚动日志总大小上限，支持 B/KB/MB/GB。null = 不限制。
+         */
+        private String totalSizeCap = "10GB";
     }
 
     /**
-     * 安全相关：API Key + 浏览器 cookie 会话配置。
+     * 安全相关：API Key + 浏览器 cookie 会话配置 + CORS 配置。
      */
     @Data
     public static class SecurityProperties {
@@ -166,6 +192,45 @@ public class MethodTraceLogProperties {
          * 浏览器端 cookie 会话配置。
          */
         private SessionProperties session = new SessionProperties();
+
+        /**
+         * 跨域配置：用于让方法追踪面板在不同 origin 部署时仍能调 API。
+         * 默认全部留空表示禁用（CorsFilter 不注册）。
+         */
+        @NestedConfigurationProperty
+        private CorsProperties cors = new CorsProperties();
+
+        /**
+         * CORS 配置。空 {@code allowedOrigins} = 完全禁用 CORS，CorsFilter 不会被注册。
+         */
+        @Data
+        public static class CorsProperties {
+            /**
+             * 允许的 origin 列表。{@code ["*"]} 表示全部允许（与 credentials 互斥）。
+             * 默认空列表 → CORS 关闭。
+             */
+            private List<String> allowedOrigins = new ArrayList<>();
+
+            /**
+             * 允许的 HTTP 方法。默认 GET/POST/OPTIONS/DELETE/PUT。
+             */
+            private List<String> allowedMethods = List.of("GET", "POST", "OPTIONS", "DELETE", "PUT");
+
+            /**
+             * 允许的请求头。默认 Content-Type + X-Api-Key + Authorization。
+             */
+            private List<String> allowedHeaders = List.of("Content-Type", "X-Api-Key", "Authorization");
+
+            /**
+             * 是否允许 credentials。与 {@code allowedOrigins=*} 互斥。默认 false。
+             */
+            private boolean allowCredentials = false;
+
+            /**
+             * preflight 缓存秒数。默认 0（不缓存，每次都走 preflight）。
+             */
+            private long maxAge = 0L;
+        }
     }
 
     /**
@@ -258,5 +323,51 @@ public class MethodTraceLogProperties {
          * 用户需要主动把它设置到自己的 RestTemplate 上。
          */
         private boolean restTemplateInterceptor = true;
+    }
+
+    /**
+     * 异常告警配置：同一 {@code className#methodName} 在滑动窗口内错误数达到阈值即触发一次告警，
+     * 触发后进入 cooldown 抑制抖动风暴。默认 {@code enable=false}，必须显式 opt-in。
+     */
+    @Data
+    public static class AlertingProperties {
+
+        /**
+         * 告警总开关。false（默认）时 AlertingService 不注册，consumer 也直接短路。
+         */
+        private boolean enable = false;
+
+        /**
+         * Webhook 接收地址。空字符串 = 不实际发送，只记本地日志 + ring buffer。
+         */
+        private String webhookUrl = "";
+
+        /**
+         * 触发告警的阈值。同一 className#methodName 在窗口内错误数 ≥ errorCount 触发。
+         */
+        private Threshold threshold = new Threshold();
+
+        /**
+         * 同 className#methodName 在 cooldown 内不重复告警，避免抖动风暴。
+         */
+        private long cooldownSeconds = 300L;
+
+        /**
+         * 白名单：仅对这些类（前缀匹配）告警。null / empty = 全部类都告警。
+         */
+        private List<String> classes = new ArrayList<>();
+
+        /**
+         * 滑动窗口阈值：窗口长度 + 窗口内错误数下限。
+         */
+        @Data
+        public static class Threshold {
+
+            /** 窗口内错误数达到该值触发告警。 */
+            private int errorCount = 10;
+
+            /** 滑动窗口长度（秒）。 */
+            private long windowSeconds = 60L;
+        }
     }
 }

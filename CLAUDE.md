@@ -19,7 +19,7 @@ Maven multi-module project, Java 17. Run from the repo root.
 - Run all tests: `mvn test`
 - Run a single test class: `mvn -pl methodTraceLog-test test -Dtest=AbstractCallServiceTest`
 - Run a single test method: `mvn -pl methodTraceLog-test test -Dtest=AbstractCallServiceTest#transContext_withArray_shouldConvertToList`
-- Launch the sample app: `mvn -pl methodTraceLog-test spring-boot:run` (the test module does not declare `spring-boot-maven-plugin`; run via `java -cp ...` or by adding the plugin to the module).
+- Launch the sample app: `mvn -pl methodTraceLog-test spring-boot:run`. The test module declares `spring-boot-maven-plugin` (added in earlier rounds); `mvn package` produces an executable fat-jar at `methodTraceLog-test/target/methodTraceLog-test-1.0-SNAPSHOT.jar` that can be run with `java -jar`.
 - Launch the MCP server: `java -jar methodTraceLog-mcp/target/methodTraceLog-mcp-1.0-SNAPSHOT.jar` (talks over stdio).
 - The Maven `mvn` command on this machine must be invoked via `/c/developer/apache-maven-3.9.16/bin/mvn` (the default `mvn` shim is broken).
 
@@ -72,7 +72,7 @@ Trace path (one method invocation on a `@Component` / `@Service` / `@RestControl
 
 `ApiKeyFilter` (`OncePerRequestFilter`) is registered as a `FilterRegistrationBean` with URL pattern `/methodTraceLog/*` and `Ordered.HIGHEST_PRECEDENCE`. It skips the filter entirely for non-`/methodTraceLog/` paths and the `/methodTraceLog/panel` HTML page; for the rest, it requires `X-Api-Key` to equal `method-trace-log.security.api-key` (when configured). OPTIONS preflight is allowed unconditionally. 401 responses are returned as plain JSON.
 
-`methodTraceLog-mcp` (`MethodTraceLogMcpApplication`) is a standalone Spring Boot process with `web-application-type: none`. `MethodToolCallbackProvider.builder().toolObjects(service).build()` registers all 13 public `@Tool` methods on `MethodTraceLogMcpService` as MCP tools. The service itself just looks up the host by name in `MethodTraceLogMcpProperties.Hosts` and forwards the call via `RestClient`, adding `X-Api-Key` if the host has one configured. Transport is stdio (default for `spring-ai-starter-mcp-server`).
+`methodTraceLog-mcp` (`MethodTraceLogMcpApplication`) is a standalone Spring Boot process with `web-application-type: none`. `MethodToolCallbackProvider.builder().toolObjects(service).build()` registers all 15 public `@Tool` methods on `MethodTraceLogMcpService` as MCP tools. The service itself just looks up the host by name in `MethodTraceLogMcpProperties.Hosts` and forwards the call via `RestClient`, adding `X-Api-Key` if the host has one configured. Transport is stdio (default for `spring-ai-starter-mcp-server`).
 
 ## HTTP surface
 
@@ -84,6 +84,8 @@ All endpoints are registered as `RouterFunction<ServerResponse>` beans (`wb04307
 - `GET  /methodTraceLog/view/list?className=&methodName=&onlyErrors=&limit=` — root `MethodTraceInfo` nodes (newest calls).
 - `GET  /methodTraceLog/view/traceid?id=` — full tree for a trace.
 - `GET  /methodTraceLog/view/export?format=json|csv&className=&methodName=&onlyErrors=&limit=` — bulk export (default limit 1000).
+- `GET  /methodTraceLog/view/alerts?limit=` — recent alert events (default limit 50; returns empty list when alerting disabled rather than 404).
+- `GET  /methodTraceLog/view/slowMethods?windowMinutes=&topN=` — slowest methods top-N from Micrometer histograms (default 5min window / top 10).
 - `GET  /methodTraceLog/decompile?className=&methodName=&timeoutSeconds=` — text/plain CFR-decompiled source, annotations stripped.
 - `GET  /methodTraceLog/logFile/files` — list of readable log files.
 - `POST /methodTraceLog/logFile/query` body: `LogQueryRequest` — paginated, filtered lines.
@@ -115,6 +117,8 @@ Tab router is `window.MTL` (`registerTab`, `showTab`, `toast`, `openModal`, help
 | `setCallServiceEnable` | Enable/disable a log service on a host |
 | `getMethodTraceList` | Recent method-call trace records on a host |
 | `getMethodTraceByTraceId` | Full call chain for a trace id on a host |
+| `getAlerts` | Recent alert events on a host (returns empty when alerting disabled) |
+| `getSlowMethods` | Slowest methods top-N from Micrometer histograms on a host |
 | `decompileMethod` | Decompile a class+method on a host, returns source |
 | `getLogFiles` | List files in a host's log directory |
 | `queryLogContent` | Filter log lines by keyword / time / level on a host |
@@ -133,7 +137,70 @@ All tool parameters are declared with `@ToolParam(description = ...)` and the pa
 - `LogAspect` explicitly excludes the framework's own types via `!within(...)`. Adding new internal classes that should also be invisible to the aspect requires extending the pointcut expression in `LogAspect.java`.
 - `SimpleMonitorServiceImpl.methodTraceInfos` is an in-memory list pruned on a best-effort basis during new root-call processing. Long-lived processes with low traffic can keep stale entries up to 8h; high traffic causes the prune to fire on every root call.
 - The default `logPattern` only matches the standard logback pattern. If `logback.xml` is changed, the regex in `application.yml` must be updated or `LogLineInfo.parse` will return unparsed lines and keyword/level/time filters will not work.
-- The `LogAspect` uses `MDC` keys `traceid` / `spanid` / `pspanid`. Custom logback patterns can include `%X{traceid}` etc. to correlate logs across services.
+- The `LogAspect` uses `MDC` keys `traceid` / `spanid` / `pspanid` / `mtlSampled`. Custom logback patterns can include `%X{traceid}` etc. to correlate logs across services.
 - The CFR decompiler reads class bytes through the classloader's `getResourceAsStream`. This works uniformly for file paths, thin jars, and Spring Boot fat-jar nested jars — do **not** try to parse the `URL.getPath()` string of the resource.
 - The CFR decompiler is invoked on a daemon thread with a future timeout. CFR running on a pathologic input will be cancelled cleanly, but the temp file is always cleaned up in `finally`.
 - This is a Windows / IntelliJ project (`.idea/` is present and `.gitignore` ignores `.idea`, `*.iws`, `*.iml`); use the Windows shell syntax hints already in this environment when running shell tools.
+
+## Phase 6+ testing & fixes (since this doc was last synced)
+
+12 rounds (Rounds 7–18, ~38 commits) on `dev` since the last CLAUDE.md refresh. The full report is in `TEST_REPORT.md` §Round 7 onward; the highlights for future-Claude context below.
+
+**Test totals (post Round 18):** **565 tests** (475 in the main `methodTraceLog-test` module + 90 in the `methodTraceLog-mcp` module), all green, 0 skipped. The MCP module has its own dedicated test suite under `methodTraceLog-mcp/src/test/java`.
+
+### Rounds 4–6 (previous sync)
+
+- **New config groups** (see `MethodTraceLogProperties`):
+  - `method-trace-log.alerting.{enable, webhook-url, threshold.{error-count, window-seconds}, cooldown-seconds, classes[]}` — opt-in `AlertingService` ICallService. `AlertingProperties` is instantiated but `enable=false` by default; the bean is only registered when `enable=true`.
+  - `method-trace-log.security.cors.{allowed-origins[], allowed-methods[], allowed-headers[], allow-credentials, max-age}` — opt-in `CorsFilter` against `/methodTraceLog/*`. Empty `allowed-origins` = filter not registered.
+  - `method-trace-log.file.{max-file-size, total-size-cap}` — defaults `100MB` / `10GB`; honoured by the test module's `SizeAndTimeBasedRollingPolicy`.
+  - `method-trace-log.log.{sample-rate, exclude-patterns[], trace-store.{type,path,max-traces,ttl-millis,rebuild-index-on-start}}` — `sample-rate` is clamped to `[0.0, 1.0]` on startup (Round 13 added `Double.isFinite` NaN/Infinity guard); `exclude-patterns` is a method-name blacklist (case-insensitive `equals` match) that short-circuits matched methods at the top of `LogAspect.around` — no `traceid` / `spanid` allocated, no `BEFORE` / `AFTER_*` events emitted (wired in `LogConfig.logAspect()` via the 3-arg `LogAspect` constructor at `LogAspect.java:91`); `trace-store` picks `in-memory` (default) / `file` / `none` via `mtlTraceStore` bean.
+
+- **New HTTP routes** (all under `/methodTraceLog`, gated by `ApiKeyFilter` when `security.api-key` is set):
+  - `GET /view/alerts?limit=` — recent `AlertEvent` list (default limit 50; returns `[]` when alerting disabled rather than 404).
+  - `GET /view/slowMethods?windowMinutes=&topN=` — top-N by p50/p95/p99/max from the Micrometer `method.execution.time` histogram (defaults 5min / 10).
+  - `POST /login` (body `{"apiKey":"..."}`), `POST /logout`, `GET /session/status` — cookie-based browser auth (sliding 8h TTL); 401 when key invalid, banner re-mounts on logout.
+  - `GET /logFile/monitor/status` — response shape changed in round 6: now returns `{monitoring, monitoredFiles:Set<String>, monitoredFilesCount}`; the old `currentFile` field is gone (clean break, JS panel unaffected).
+
+- **New MCP tools** (`MethodTraceLogMcpService`): `getAlerts(host, limit?)` and `getSlowMethods(host, windowMinutes?, topN?)`. Tool count is **15** now (was 13).
+
+- **New beans / lifecycle**:
+  - `AlertingService` — registered only when `alerting.enable=true`. Webhook delivery runs on a dedicated daemon `cached` pool with 3s per-call timeout; never blocks Tomcat threads (the original sync-delivery bug would self-deadlock when the webhook URL pointed at the host itself). Round 13 fixed the cooldown `putIfAbsent` race and switched from `transContext(info.getContext())` to `info.getRawException()` to preserve the original Throwable + stack trace.
+  - `SlowMethodAnalyzer` — unconditional; pure read of the Micrometer registry.
+  - `MtlShutdownHook` (nested in `LogConfig`) — registers a JVM shutdown hook that calls `ConfigurableApplicationContext.close()`. Belt-and-braces for Windows where `Ctrl+C` does not always reach the JVM.
+  - `LogFileRealTimeService.close()` is `public` and annotated `@PreDestroy` so the `WatchService` + `ScheduledExecutorService` are released on every Spring teardown path.
+  - `CorsFilterConfig` — wraps `CorsFilter` in a `FilterRegistrationBean` with URL pattern `/methodTraceLog/*` (Round 13 fixed the original `/*` scope that silently shadowed user filters). When `cors.allowed-origins` is non-empty, the filter applies the configured origins/methods/headers; when empty, it acts as a no-op. Must be listed in `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` (Round 7 caught this regression).
+  - `ErrorMessagePropertiesPostProcessor` — `EnvironmentPostProcessor` that sets `server.error.include-message=always` and `include-stacktrace=never` as defaults. Round 13 switched `addFirst` → `addLast` so user `PropertySources` (yaml/cmdline) win over starter defaults.
+
+- **New tests** (under `methodTraceLog-test/src/test/...`):
+  - `ApiKeyFilterTest` — 8 direct unit tests (X-Api-Key, cookie, panel whitelist, OPTIONS, no-op).
+  - `InMemoryTraceStoreMaxTracesTest` — 5 eviction cases.
+  - `FileTraceStoreTest.rebuildIndex_*` — 2 cases for index+recent population.
+  - `LogFileRealTimeServiceMultiFileTest` — 5 cases for concurrent multi-file monitoring.
+  - `ErrorMessagePropertiesPostProcessorTest` — 2 cases (defaults added when unset, user values preserved).
+  - `MethodTraceLogMcpServiceTest` — 13 unit tests for URL assembly, clamping, host lookup, `X-Api-Key` forwarding.
+
+### Rounds 7–18 (this sync)
+
+- **Full-coverage E2E (Round 7)** — 14 new `*IT` classes in `cn.wubo.method.trace.log.e2e.*` (26 e2e test methods) cover every feature end-to-end via dual-path verification (JUnit HTTP + Agent MCP). Round 11 added 7 more IT classes for deep paths (5+ level nested calls, concurrent trace isolation, MDC cleanup, cooldown suppression, sample-rate exclusion, in-memory OTel export, file-store persistence). Round 7 itself caught 2 real bugs: `CorsFilterConfig` had been silently missing from `AutoConfiguration.imports` since Round 5 (CORS was broken in production); `exclude-patterns` existed in code but was never written into the test app's `application.yml`. `MtlE2eHarness` shared helper manages single + multi-instance Spring contexts with `X-Api-Key: change-me-in-production`.
+
+- **Cross-instance `pspanid` fix (Rounds 8–9)** — Round 7 Ruling 6 identified that `LogAspect` read `prespanid` from the MDC key `spanid` instead of `pspanid`. Round 8 deferred the fix because the naive `LogAspect`-only change broke the store's "pspanid==null means root" assumption. Round 9 fixes it as a coordinated two-file change: `LogAspect:168` now sets `pspanid = prespanid != null ? prespanid : prepspanid` (in-process nested uses caller span id; cross-instance inbound uses upstream parent's span id from `traceparent`); `SimpleMonitorServiceImpl.save()` switched its condition from `pspanid == null` to `methodTraceInfoMap.get(pspanid) == null` (null-safe) — true roots and cross-instance inbounds both save as top-level entries; in-process children only attach. Behaviour change: `/view/list` now returns BOTH true roots AND cross-instance inbounds; the web panel will show cross-instance entries as top-level.
+
+- **OTel test environment (Round 10)** — `OtelAutoConfig` deliberately does not call `GlobalOpenTelemetry.set()` (javadoc documents the reason: avoids conflict with Spring Boot's auto-configured OTel). Round 10 changes ONLY the test env: `OtelPropagationIT` boots the primary context with `method-trace-log.otel.enable=true` and injects the SDK bean into `GlobalOpenTelemetry` via `MtlE2eHarness.context()`, so the test body actually executes end-to-end. `GlobalOpenTelemetry.resetForTest()` cleans up in `@AfterAll`. The 1 OTel skip → 0 skips.
+
+- **Risk-driven testing (Rounds 12, 16–17)** — the 92 risks in the 2026-08-29 risk inventory are now fully closed (all critical / high / medium / low). Round 12 added 14 test classes / 53 methods (top risks) — caught real bug R-13 (`InMemoryTraceStore` same-traceid race balloons to 306 entries under 16-thread contention). Round 16 added 8 classes / 74 methods (medium risks) — fixed `LogFileService.queryLogs(page<1)` IOOBE from `subList(-N, ...)`. Round 17 added 13 classes / 97 methods (low risks) — deleted dead `cn.wubo.method.trace.log.sampler.SampledDecision` (R-66, `grep` confirmed zero production usage).
+
+- **`/code-review` cycle (Round 13)** — 9 real bugs fixed from the 2026-08-29 `/code-review` run. Highlights: `CorsFilterConfig` scope `/*` → `/methodTraceLog/*` (silently shadowed user filters); `ErrorMessagePropertiesPostProcessor` `addFirst` → `addLast` (user values were being overridden); `AlertingService` cooldown check-then-put → `putIfAbsent(key, now)` (atomic); `DecompilerUtils.extractMethod` regex now matches constructors (was: return-type group required); `/methodTraceLog/decompile` endpoint returns 200 + full-class source when extractMethod returns empty (was: 404 — restored documented contract); `SimpleMonitorServiceImpl` cross-thread race fix (skip save when parent has in-flight children); `sample-rate` clamp `Double.isFinite(rate) ? clamp : 1.0` (YAML `NaN`/`Infinity` no longer crash startup); `LogPathEnvironmentPostProcessor` probes `Files.isWritable` and throws IAE (honors documented fail-fast); `AlertingService` preserves raw `Throwable` via `info.getRawException()`. 26 new regression tests added.
+
+- **MCP module hardening (Rounds 14–15)** — 18 fixes from the MCP risk inventory. The MCP module now has 90 dedicated tests (was 13 at start of Round 14, after Round 14 was 46, after Round 15 was 84, after Round 17 was 90). Highlights: `JdkClientHttpRequestFactory` with 3s connect / 30s + 120s read timeouts; `SizeLimitingClientHttpRequestFactory` 16 MiB body cap (delegating factory with `Content-Length` pre-check + streaming `BoundedInputStream` byte counter — `ExchangeStrategies.maxInMemorySize` doesn't exist on `RestClient.Builder` in Spring 6.2); `ToolOp` enum + `doWithRetry` exponential backoff (2 retries / 100-500ms) for idempotent GETs only; `safeGet`/`safePost` + `toErrorJson` + cause-chain walker returns structured error JSON instead of leaking stack traces; `@PostConstruct validateHosts()` rejects empty `hosts[]` / duplicate names / blank fields / non-http(s) URLs; WARN on cleartext `http://` + non-empty api-key; switched to Apache HttpClient 5 via `@Bean(destroyMethod="close") CloseableHttpClient` + `spring.lifecycle.timeout-per-shutdown-phase=30s` so connection pool releases on shutdown; `ping` tries `/actuator/health` first, falls back to `/methodTraceLog/view/callServices`, returns `HOST_NOT_EXPOSING_ACTUATOR` envelope if both 404; `URLEncoder.encode(s, UTF_8).replace("+", "%20")` for RFC 3986 path encoding; `getMethodTraceByTraceId` validates `^[A-Za-z0-9_-]{1,128}$`; `validateLogQueryArgs` clamps `fileName ≤ 256`, `keyword ≤ 1024`, validates ISO 8601 `startTime`/`endTime`; `mcp.audit` SLF4J logger emits one structured `tool= host= path= status= duration=ms` line per call.
+
+- **Performance (Round 18)** — `LogFileService.queryLogs` moved its `page<1` runtime guard to the top of the method (before any `Files.lines().limit(maxScanLines)` read+filter); added a parallel `pageSize<1` guard. Invalid input fails fast without paying the file-IO cost; the original post-read page guard is retained as belt-and-braces.
+
+- **MCP module** is a real first-class citizen now: `methodTraceLog-mcp` is a separate, standalone Spring Boot process (`web-application-type: none`, stdio transport, talks to hosts over HTTP). It lives at `methodTraceLog-mcp/` and has its own `pom.xml`, `logback-spring.xml`, `application.yml`, and `src/test/java` test suite. When adding an MCP tool, add a public `@Tool`-annotated method to `MethodTraceLogMcpService`; `MethodToolCallbackProvider` picks it up automatically.
+
+### Open / blocked items (still on the roadmap)
+
+- Windows `taskkill` without `/F` still skips JVM shutdown hooks (`CTRL_CLOSE_EVENT` not mapped). The `@PreDestroy` + JVM shutdown-hook combination is the most portable fix without dropping into `sun.misc.Signal`.
+- `LogAspectExclusionTest` (`methodTraceLog-test/.../LogAspectExclusionTest.java`) passes 6/6 — the historical "2 pre-existing failures" claim from earlier CLAUDE.md syncs is stale (Round 7 verified the test passes; Spring's CGLIB proxy correctly skips Object methods, so the test was redesigned to use Lombok-generated equals/toString stand-ins).
+- R-12 (logback → stderr) and R-14 (empty `hosts[]`) from the MCP risk inventory: closed via R-05 (`@PostConstruct validateHosts()` rejects empty) and the existing logback config; documented as "partially addressed" in TEST_REPORT §Round 15.
+

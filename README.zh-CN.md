@@ -28,7 +28,7 @@
 | **OTel 导出** | classpath 上有 `opentelemetry-sdk` 时自动桥接到 OTLP/HTTP |
 | **W3C traceparent** | HTTP 入站和 `RestClient` 出站自动注入/提取 |
 | **Cookie 会话** | 浏览器 `POST /methodTraceLog/login` 登录；CLI / MCP 继续用 `X-Api-Key` |
-| **MCP 服务** | 独立 stdio 进程；13 个工具，多主机，通过 HTTP 转发到目标应用 |
+| **MCP 服务** | 独立 stdio 进程；15 个工具，多主机，通过 HTTP 转发到目标应用 |
 
 ---
 
@@ -40,7 +40,7 @@
 <dependency>
     <groupId>io.github.wb04307201</groupId>
     <artifactId>methodTraceLog-spring-boot-starter</artifactId>
-    <version>1.0.20</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
@@ -75,9 +75,10 @@ management:
 method-trace-log:
   log:
     enable: true                                  # AOP 总开关
-    sample-rate: 1.0                              # 0.0 ~ 1.0；子调用继承父决定
+    sample-rate: 1.0                              # 0.0 ~ 1.0；子调用继承父决定（启动时会自动 clamp）
+    exclude-patterns: []                          # 方法名黑名单（大小写不敏感精确匹配）；命中后直接 proceed()，不发任何事件。例如 [equals, hashCode, toString, canEqual]
     service-calls:                                # 启动时各服务开关
-      - { name: CustomLog,         enable: false }   # 内置 3 个: SimpleLogService / SimpleMonitorService / CustomLog
+      - { name: CustomLog,         enable: false }   # 内置: SimpleLogService / SimpleMonitorService / AlertingService / CustomLog
     trace-store:                                  # 内存 trace 树持久化
       type: in-memory                             # in-memory | file | none
       path: ./trace-store                         # 仅 type=file 时生效（自动按 yyyy-MM-dd 建子目录）
@@ -89,11 +90,19 @@ method-trace-log:
     path: ./logs
     allowed-extensions: [.log, .txt, .out]
     scan-lines: 10000                             # 流式扫描行数上限；Files.lines() + limit() 是懒加载，文件本身多大都无所谓，没有 size check
+    max-file-size: 100MB                          # 单文件大小上限（默认；0/null = 不限制）
+    total-size-cap: 10GB                          # 目录下所有滚动文件总大小上限
     # log-pattern: (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\s+\[([^\]]+)\]\s+(\w+)\s+([^\s]+)\s*-\s*(.*)
   security:
     api-key: change-me-in-production              # 留空 = 关闭鉴权
     session:
       ttl-millis: 28800000                        # 浏览器 cookie 会话 8h 滑动过期
+    cors:                                         # 跨域配置（面板部署在不同 origin 时使用；opt-in：空列表 = 不注册）
+      allowed-origins: []                         # ["https://your-panel.example.com"]；["*"] = 全部（与 credentials 互斥）
+      allowed-methods: [GET, POST, OPTIONS, DELETE, PUT]
+      allowed-headers: [Content-Type, X-Api-Key, Authorization]
+      allow-credentials: false                    # true 时 allowed-origins 不能是 "*"
+      max-age: 0                                  # preflight 缓存秒数（0 = 每次重新校验）
   decompile:
     timeout-seconds: 10                           # CFR daemon 线程超时
   otel:                                           # 需要 classpath 上有 opentelemetry-sdk
@@ -109,6 +118,14 @@ method-trace-log:
     http-inbound: true                            # TraceContextFilter 读 traceparent
     rest-client-outbound: true                    # RestClient.Builder 拦截器
     rest-template-interceptor: true               # 暴露 RestTemplate 拦截器 Bean
+  alerting:                                       # 异常告警（opt-in，默认关闭）
+    enable: false                                 # true 时注册 AlertingService 作为 ICallService
+    webhook-url: ""                               # 空 = 只本地记录；非空则异步 POST 事件（best-effort）
+    threshold:
+      error-count: 10                             # 同一 class#method 在窗口内错误数达到该值触发
+      window-seconds: 60                          # 滑动窗口长度
+    cooldown-seconds: 300                         # 同一 key 在冷却期内不再重复告警
+    classes: []                                   # 白名单（前缀匹配）；空 = 全部类都告警
 ```
 
 ---
@@ -125,6 +142,8 @@ method-trace-log:
 | GET | `/methodTraceLog/view/list?className=&methodName=&onlyErrors=&limit=` | 最近根 trace |
 | GET | `/methodTraceLog/view/traceid?id=` | 单个 trace 完整调用链 |
 | GET | `/methodTraceLog/view/export?format=json\|csv&className=&methodName=&onlyErrors=&limit=` | 批量导出（默认 limit 1000） |
+| GET | `/methodTraceLog/view/alerts?limit=` | 最近告警事件（默认 limit 50；告警未启用时返回空 list） |
+| GET | `/methodTraceLog/view/slowMethods?windowMinutes=&topN=` | Micrometer histogram 出来的最慢方法 top-N（默认 5min / top 10） |
 | GET | `/methodTraceLog/decompile?className=&methodName=&timeoutSeconds=` | text/plain 源码 |
 | GET | `/methodTraceLog/logFile/files` | 日志目录文件列表 |
 | POST | `/methodTraceLog/logFile/query` | 关键字 / 时间 / 级别过滤分页 |
@@ -217,7 +236,7 @@ Claude Desktop / Cursor / Cline 等 AI 客户端的 MCP server 配置（`mcpServ
     "methodTraceLog-mcp": {
       "command": "jbang.cmd",
       "args": [
-        "io.github.wb04307201:methodTraceLog-mcp:1.0.20",
+        "io.github.wb04307201:methodTraceLog-mcp:1.1.0",
         "--method-trace-log.mcp.hosts[0].name=local-dev",
         "--method-trace-log.mcp.hosts[0].url=http://localhost:8080",
         "--method-trace-log.mcp.hosts[0].description=本地开发",
@@ -228,7 +247,7 @@ Claude Desktop / Cursor / Cline 等 AI 客户端的 MCP server 配置（`mcpServ
 }
 ```
 
-**13 个工具**：`getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`。
+**15 个工具**：`getHosts`, `ping`, `getCallServices`, `setCallServiceEnable`, `getMethodTraceList`, `getMethodTraceByTraceId`, `getAlerts`, `getSlowMethods`, `decompileMethod`, `getLogFiles`, `queryLogContent`, `downloadLog`, `startMonitor`, `stopMonitor`, `getMonitorStatus`。
 
 ---
 
